@@ -160,8 +160,9 @@ of an actor's state between two sequential tipsets:
                        model.
 
   actorstatespower     Analyzes changes to the storage power to capture information
-                       about total power at each epoch and updates to miner power claims.
-                       Populates the chain_powers and power_actor_claims models.
+                       about total power at each epoch and updates to miner power
+                       claims. Populates the chain_powers and power_actor_claims
+                       models.
 
   actorstatesreward    Captures changes in the reward actor state to provide
                        information about miner rewards for each epoch. Populates
@@ -172,6 +173,104 @@ Other tasks:
   msapprovals  Captures approvals of multisig actors by interpreting the outcome
                of approval messages sent on chain. Populates the
                multisig_approvals model.
+`,
+	},
+
+	{
+		Name:        "monitoring",
+		Description: "monitoring the operation of visor",
+		Text: `Visor may be monitored during operation using logfiles, metrics and tracing.
+The visor command reocgnizes environment variables and provides options to
+control the behaviour of each type of monitoring output. Options should be
+supplied before any sub command:
+
+  visor [global options] <command>
+
+Visor uses the IPFS logging library (https://github.com/ipfs/go-ipfs) to write
+application logs. By default logs are written to STDERR in JSON format. Log
+lines are labeled with one of seven levels to indicate severity of the message
+(DEBUG, INFO, WARN, ERROR, DPANIC, PANIC, FATAL). Line are also labeled with
+named systems which indicate the area of function that produced the log. Each
+system may be configured to only emit log messages of a specific level or
+higher. By default all log levels are set to debug and above.
+
+A number of environment variables may be used to control the format and
+destination of the logs.
+
+  GOLOG_LOG_LEVEL        Set the default log level for all log systems.
+
+  GOLOG_LOG_FMT          Set the output log format. By default logs will be
+                         colorized and text format. Use 'json' to specify
+                         JSON formatted logs and 'nocolor' to log in text
+                         format without colors.
+
+  GOLOG_FILE             Specify the name of the file that logs should be
+                         written to. Only used if GOLOG_OUTPUT contains the
+                         'file' keyword.
+
+  GOLOG_OUTPUT           Specify whether to output to file, stderr, stdout or
+                         a combination. Separate each keyword with a '+', for
+                         example: file+stderr
+
+  VISOR_LOG_LEVEL_NAMED  Set the log level of specific loggers. The value
+                         should be a comma delimited list of log systems and
+                         log levels formatted as name:level, for example
+                         'logger1:debug,logger2:info'.
+
+In addition, visor supports some global options for controlling logging:
+
+  --log-level LEVEL        Set the default log level for all loggers to LEVEL.
+                           This option overrides any value set using the
+                           GOLOG_LOG_LEVEL environment variable.
+
+  --log-level-named value  Set the log level of specific loggers. This option
+                           overrides any value set using the
+                           VISOR_LOG_LEVEL_NAMED environment variable.
+
+To control logging output while the visor daemon is running see 'visor help log'.
+
+During operation visor exposes metrics and debugging information on port 9991
+by default. The address used by this http server can be changed using the
+'--prometheus-port' option which expects an IP address and port number. The
+address may be omitted to run the server on all interfaces, for example: ':9991'.
+
+The following paths can be accessed using a standard web browser.
+
+  /metrics       Metrics published in prometheus format
+
+  /debug/pprof/  Access to standard Go profiling and debugging information
+                 memory allocations, cpu profile and active goroutines dumps.
+
+Visor can publish function level tracing to a Jaeger compatible service. By
+default tracing is disabled.
+
+Environment variables for controlling function level tracing:
+
+  VISOR_TRACING         Enable tracing. Set to 'true' to enable tracing.
+
+  JAEGER_AGENT_HOST,    Hostname and port of a Jaeger compatible agent that
+  JAEGER_AGENT_PORT     visor should send traces to.
+
+  JAEGER_SERVICE_NAME   The name visor should use when reporting traces.
+
+  JAEGER_SAMPLER_TYPE,  Control the type of sampling used to capture traces.
+  JAEGER_SAMPLER_PARAM  The type may be either 'const' or 'probabilistic'.
+                        The behaviour of the sampler is controlled by the
+                        value of param. For a 'const' sampler a value of 1
+                        indicates that every function call should be traced,
+                        while 0 means none should be traced. No intermediate
+                        values are accepted. For a 'probabilistic' sampler
+                        the param indicates the fraction of function calls
+                        that should be sampled.
+
+The following options may be used to override the tracing environment variables:
+
+  --tracing
+  --jaeger-agent-host
+  --jaeger-agent-port
+  --jaeger-service-name
+  --jaeger-sampler-type
+  --jaeger-sampler-param
 `,
 	},
 }
