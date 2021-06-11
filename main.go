@@ -36,9 +36,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	cli.AppHelpTemplate = commands.AppHelpTemplate
+
 	app := &cli.App{
 		Name:    "visor",
-		Usage:   "Filecoin Chain Monitoring Utility",
+		Usage:   "a tool for capturing on-chain state from the filecoin network",
 		Version: version.String(),
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -98,7 +100,10 @@ func main() {
 				Destination: &commands.VisorCmdFlags.PrometheusPort,
 			},
 		},
+		HideHelp: true,
+		Metadata: commands.Metadata(),
 		Commands: []*cli.Command{
+			commands.HelpCmd,
 			commands.DaemonCmd,
 			commands.InitCmd,
 			commands.JobCmd,
