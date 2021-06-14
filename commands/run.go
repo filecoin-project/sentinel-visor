@@ -22,6 +22,46 @@ func init() {
 var RunCmd = &cli.Command{
 	Name:  "run",
 	Usage: "Run a single job without starting a daemon.",
+	Description: `Starts visor in a standalone mode to run a single job using an external source
+of block data. Visor exits when the job is complete or when a fatal error
+occurs.
+
+To start a watch use 'visor run watch'. A watch does not terminate but follows
+the chain forever.
+
+To start a walk use 'visor run walk' and specify the range of heights
+using --from and --to.  A walk job completes when it has traversed all tipsets
+in the requested range including the start and end heights.
+
+The source of block data is specified by passing the --lens option to the 'walk'
+or 'watch' command. Several lenses are supported:
+
+  lotus       Obtain block data using the JSON-RPC API of a Lotus node.
+              Use the --lens-lotus-api option to specify the address if the
+              Lotus node.
+
+  lotusrepo   Read block data from a Lotus node's repository on disk.
+              Use the --lens-repo option to specify the directory containing
+              the repository.
+
+  carrepo     Read block data from a block archive in car format.
+              Use the --lens-repo option to specify the name of the car file.
+
+Use the --csv option to specify a directory to write the extracted data in CSV
+format.
+
+Use the --db option to specify a connection string for the TimescaleDB
+database. See 'visor help schema' for more information on the database schema
+used.
+
+Note that the volume of data and number of API requests needed to fully extract
+actor states can be extremely high. Running actor tasks against a running Lotus
+node is not recommended and may cause the node to fall out of sync. Consider
+operating visor in daemon mode instead (see 'visor help daemon') or, for
+historic walks, use a copy of the lotus node's blockstore with the 'lotusrepo'
+lens.
+`,
+
 	Subcommands: []*cli.Command{
 		RunWatchCmd,
 		RunWalkCmd,
@@ -33,7 +73,7 @@ var dbConnectFlags = []cli.Flag{
 		Name:    "db",
 		EnvVars: []string{"LOTUS_DB"},
 		Value:   "",
-		Usage:   "A connection string for the postgres database, for example postgres://postgres:password@localhost:5432/postgres",
+		Usage:   "A connection string for the TimescaleDB database, for example postgres://postgres:password@localhost:5432/postgres",
 	},
 	&cli.IntFlag{
 		Name:    "db-pool-size",

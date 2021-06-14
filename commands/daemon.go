@@ -41,6 +41,54 @@ var daemonFlags daemonOpts
 var DaemonCmd = &cli.Command{
 	Name:  "daemon",
 	Usage: "Start a visor daemon process.",
+	Description: `Starts visor in daemon mode with its own blockstore.
+In daemon mode visor synchronizes with the filecoin network and runs jobs such
+as walk and watch against its local blockstore. This gives better performance
+than operating against an external blockstore but requires more disk space and
+memory.
+
+Before starting the daemon for the first time the blockstore must be initialized
+and synchronized. Visor can use a copy of an already synchronized Lotus node
+repository or can initialize its own empty one and import a snapshot to catch
+up to the chain.
+
+To initialize an empty visor blockstore repository and import an initial
+snapshot of the chain:
+
+  visor init --repo=<path> --import-snapshot=<url>
+
+This will initialize a blockstore repository at <path> and import chain state
+from the snapshot at <url>. The type of snapshot needed depends on the type
+of jobs expected to be run by the daemon.
+
+Watch jobs only require current actor state to be imported since incoming
+tipsets will be used to keep actor states up to date. The lightweight and full
+chain snapshots available at https://docs.filecoin.io/get-started/lotus/chain/
+are suitable to initialize the daemon for watch jobs.
+
+Historic walks will require full actor states for the range of heights covered
+by the walk. These may be created from an existing Lotus node using the
+export command, provided receipts are also included in the export. See the
+Lotus documentation for full details.
+
+Once the repository is initialized, start the daemon:
+
+  visor daemon --repo=<path>
+
+Visor will connect to the filecoin network and begin synchronizing with the
+chain. To check the synchronization status use 'visor sync status' or
+'visor sync wait'.
+
+Jobs may be started on the daemon at any time. A watch job will wait for the
+daemon to become synchronized before extracting data and will pause if the
+daemon falls out of sync. Start a watch using 'visor watch'.
+
+A walk job will start immediately. Start a walk using 'visor walk'.
+
+Note that jobs are not persisted between restarts of the daemon. See
+'visor help job' for more information on managing jobs being run by the daemon.
+`,
+
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name: "api",
@@ -62,6 +110,7 @@ var DaemonCmd = &cli.Command{
 			EnvVars:     []string{"VISOR_BOOTSTRAP"},
 			Value:       true,
 			Destination: &daemonFlags.bootstrap,
+			Hidden:      true, // hide until we decide if we want to keep this.
 		},
 		&cli.StringFlag{
 			Name:        "config",

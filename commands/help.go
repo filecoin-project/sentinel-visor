@@ -81,10 +81,6 @@ Additional help topics:
   {{.Name}}{{"\t"}}{{.Description}}{{end}}
 
 Use "{{.HelpName}} help <topic>" for more information about that topic.
-
-GLOBAL OPTIONS:
-   {{range $index, $option := .VisibleFlags}}{{if $index}}
-   {{end}}{{$option}}{{end}}
 `
 
 type helpTopic struct {
@@ -97,8 +93,53 @@ type helpTopic struct {
 //                                                            80 characters -->
 var helpTopics = []helpTopic{
 	{
+		Name:        "overview",
+		Description: "Overview of visor",
+		Text: `Visor is an application for capturing on-chain state from the filecoin network.
+It extracts data from the blocks and messages contained in each tipset and
+captures the effects those messages have on actor states. Visor can 'watch'
+the head of the filecoin chain for incoming tipsets or 'walk' the chain to
+analyze historic tipsets.
+
+A watch is intended to follow the growth of the chain and operates by
+subscribing to incoming tipsets and processing them as they arrive. A
+confidence level may be  specified which determines how many epochs visor
+should wait before processing the tipset. This is to allow for chain
+reorganisation near the head. A low confidence level risks extracting data from
+tipsets that do not form part of the consensus chain.
+
+A walk takes a range of heights and will walk from the heaviest tipset at the
+upper height to the lower height using the parent state root present in each
+tipset.
+
+The type of data extracted by visor is controlled by 'tasks' that focus on
+particular parts of the chain. For more information about available tasks
+see 'visor help tasks'.
+
+Data is extracted into models that represent chain objects, components of actor
+state and derived statistics. Visor can insert these extracted models into a
+TimescaleDB database as separate tables or emit them as csv files. For more
+information on the database schema used by visor see 'visor help schema'.
+
+Visor requires access to a filecoin blockstore that holds the state of the
+chain. For watching incoming tipsets the blockstore must be connected and in
+sync with the filecoin network. Historic walks can be performed against an
+offline store. Visor may be operated in two different modes that control the
+way in which the blockstore is accessed.
+
+When run as a daemon, visor will maintain its own local blockstore and attempt
+to synchronise it with the filecoin network. For more information on running
+visor as a daemon, including how to initialise the blockstore, see
+'visor help daemon'.
+
+In standalone mode visor uses an external source of filecoin block data such as
+a Lotus node or a chain export file. See 'visor help run' for more information.
+`,
+	},
+
+	{
 		Name:        "tasks",
-		Description: "available task types",
+		Description: "Available task types",
 		Text: `Visor provides several tasks to capture different aspects of chain state.
 The walk and watch subcommands can be configured to run specific tasks
 using the --tasks option which expects a comma separated list of task
@@ -178,7 +219,7 @@ Other tasks:
 
 	{
 		Name:        "monitoring",
-		Description: "monitoring the operation of visor",
+		Description: "Monitoring visor operation",
 		Text: `Visor may be monitored during operation using logfiles, metrics and tracing.
 The visor command reocgnizes environment variables and provides options to
 control the behaviour of each type of monitoring output. Options should be
