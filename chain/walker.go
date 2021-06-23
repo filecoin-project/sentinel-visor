@@ -23,7 +23,7 @@ func NewWalker(obs TipSetObserver, opener lens.APIOpener, minHeight, maxHeight i
 	}
 }
 
-// Walker is a task that indexes blocks by walking the chain history.
+// Walker is a job that indexes blocks by walking the chain history.
 type Walker struct {
 	opener    lens.APIOpener
 	obs       TipSetObserver

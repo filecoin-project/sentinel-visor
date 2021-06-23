@@ -17,6 +17,7 @@ import (
 	"github.com/filecoin-project/sentinel-visor/chain"
 	"github.com/filecoin-project/sentinel-visor/lens"
 	"github.com/filecoin-project/sentinel-visor/lens/util"
+	"github.com/filecoin-project/sentinel-visor/network"
 	"github.com/filecoin-project/sentinel-visor/schedule"
 	"github.com/filecoin-project/sentinel-visor/storage"
 )
@@ -166,6 +167,34 @@ func (m *LilyNodeAPI) LogSetLevel(ctx context.Context, subsystem, level string) 
 func (m *LilyNodeAPI) Shutdown(ctx context.Context) error {
 	m.ShutdownChan <- struct{}{}
 	return nil
+}
+
+func (m *LilyNodeAPI) LilyObserve(_ context.Context, cfg *LilyObserveConfig) (schedule.JobID, error) {
+	// the context's passed to these methods live for the duration of the clients request, so make a new one.
+	ctx := context.Background()
+
+	// create a database connection for this watch, ensure its pingable, and run migrations if needed/configured to.
+	strg, err := m.StorageCatalog.Connect(ctx, cfg.Storage)
+	if err != nil {
+		return schedule.InvalidJobID, err
+	}
+
+	// instantiate an indexer to extract block, message, and actor state data from observed tipsets and persists it to the storage.
+	obs, err := network.NewObserver(m, strg, cfg.Interval, cfg.Name, cfg.Tasks)
+	if err != nil {
+		return schedule.InvalidJobID, err
+	}
+
+	id := m.Scheduler.Submit(&schedule.JobConfig{
+		Name:                cfg.Name,
+		Tasks:               cfg.Tasks,
+		Job:                 obs,
+		RestartOnFailure:    cfg.RestartOnFailure,
+		RestartOnCompletion: cfg.RestartOnCompletion,
+		RestartDelay:        cfg.RestartDelay,
+	})
+
+	return id, nil
 }
 
 type HeadNotifier struct {
