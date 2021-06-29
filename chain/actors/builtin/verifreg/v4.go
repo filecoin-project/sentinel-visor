@@ -30,6 +30,10 @@ type state4 struct {
 	store adt.Store
 }
 
+func (s *state4) Code() cid.Cid {
+	return builtin4.VerifiedRegistryActorCodeID
+}
+
 func (s *state4) RootKey() (address.Address, error) {
 	return s.State.RootKey, nil
 }

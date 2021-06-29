@@ -9,6 +9,7 @@ import (
 	"github.com/filecoin-project/sentinel-visor/chain/actors"
 	"github.com/filecoin-project/sentinel-visor/chain/actors/adt"
 
+	builtin2 "github.com/filecoin-project/specs-actors/v2/actors/builtin"
 	verifreg2 "github.com/filecoin-project/specs-actors/v2/actors/builtin/verifreg"
 	adt2 "github.com/filecoin-project/specs-actors/v2/actors/util/adt"
 )
@@ -27,6 +28,10 @@ func load2(store adt.Store, root cid.Cid) (State, error) {
 type state2 struct {
 	verifreg2.State
 	store adt.Store
+}
+
+func (s *state2) Code() cid.Cid {
+	return builtin2.VerifiedRegistryActorCodeID
 }
 
 func (s *state2) RootKey() (address.Address, error) {

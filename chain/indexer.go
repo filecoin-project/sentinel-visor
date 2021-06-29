@@ -11,6 +11,7 @@ import (
 	"github.com/filecoin-project/go-hamt-ipld/v3"
 	"github.com/filecoin-project/lotus/chain/state"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filecoin-project/sentinel-visor/chain/actors/builtin/verifreg"
 	"github.com/filecoin-project/sentinel-visor/lens/lotus"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
@@ -45,6 +46,7 @@ const (
 	ActorStatesInitTask     = "actorstatesinit"     // task that only extracts init actor states (but not the raw state)
 	ActorStatesMarketTask   = "actorstatesmarket"   // task that only extracts market actor states (but not the raw state)
 	ActorStatesMultisigTask = "actorstatesmultisig" // task that only extracts multisig actor states (but not the raw state)
+	ActorStatesVerifreg     = "actorstatesverifreg" // task that only extracts verified registry actor states (but not the raw state)
 	BlocksTask              = "blocks"              // task that extracts block data
 	MessagesTask            = "messages"            // task that extracts message data
 	ChainEconomicsTask      = "chaineconomics"      // task that extracts chain economics data
@@ -117,6 +119,8 @@ func NewTipSetIndexer(o lens.APIOpener, d model.Storage, window time.Duration, n
 			tsi.actorProcessors[ActorStatesMarketTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(market.AllCodes()))
 		case ActorStatesMultisigTask:
 			tsi.actorProcessors[ActorStatesMultisigTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(multisig.AllCodes()))
+		case ActorStatesVerifreg:
+			tsi.actorProcessors[ActorStatesVerifreg] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(verifreg.AllCodes()))
 		case MultisigApprovalsTask:
 			tsi.messageProcessors[MultisigApprovalsTask] = msapprovals.NewTask(o)
 		default:
