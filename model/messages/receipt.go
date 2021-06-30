@@ -3,6 +3,7 @@ package messages
 import (
 	"context"
 
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/api/trace"
@@ -11,6 +12,10 @@ import (
 	"github.com/filecoin-project/sentinel-visor/metrics"
 	"github.com/filecoin-project/sentinel-visor/model"
 )
+
+func init() {
+	registry.ModelRegistry.Register(registry.MessagesTask, &Receipt{})
+}
 
 type Receipt struct {
 	Height    int64  `pg:",pk,notnull,use_zero"` // note this is the height of the receipt not the message

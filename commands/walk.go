@@ -11,6 +11,7 @@ import (
 	lotuscli "github.com/filecoin-project/lotus/cli"
 	"github.com/filecoin-project/sentinel-visor/chain/actors/builtin"
 	"github.com/filecoin-project/sentinel-visor/lens/lily"
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"github.com/filecoin-project/sentinel-visor/schedule"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
@@ -40,7 +41,7 @@ var WalkCmd = &cli.Command{
 		&cli.StringFlag{
 			Name:        "tasks",
 			Usage:       "Comma separated list of tasks to run. Each task is reported separately in the database.",
-			Value:       strings.Join([]string{chain.BlocksTask, chain.MessagesTask, chain.ChainEconomicsTask, chain.ActorStatesRawTask}, ","),
+			Value:       strings.Join([]string{registry.BlocksTask, registry.MessagesTask, registry.ChainEconomicsTask, registry.ActorStatesRawTask}, ","),
 			Destination: &walkFlags.tasks,
 		},
 		&cli.DurationFlag{
@@ -148,7 +149,7 @@ var RunWalkCmd = &cli.Command{
 			&cli.StringFlag{
 				Name:    "tasks",
 				Usage:   "Comma separated list of tasks to run. Each task is reported separately in the database.",
-				Value:   strings.Join([]string{chain.BlocksTask, chain.MessagesTask, chain.ChainEconomicsTask, chain.ActorStatesRawTask}, ","),
+				Value:   strings.Join([]string{registry.BlocksTask, registry.MessagesTask, registry.ChainEconomicsTask, registry.ActorStatesRawTask}, ","),
 				EnvVars: []string{"VISOR_WALK_TASKS"},
 			},
 			&cli.StringFlag{

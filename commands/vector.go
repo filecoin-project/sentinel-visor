@@ -7,10 +7,10 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 
-	"github.com/filecoin-project/sentinel-visor/chain"
 	"github.com/filecoin-project/sentinel-visor/vector"
 )
 
@@ -42,7 +42,7 @@ var BuildVectorCmd = &cli.Command{
 		&cli.StringFlag{
 			Name:    "tasks",
 			Usage:   "Comma separated list of tasks to build. Each task is reported separately in the database.",
-			Value:   strings.Join([]string{chain.BlocksTask}, ","),
+			Value:   strings.Join([]string{registry.BlocksTask}, ","),
 			EnvVars: []string{"VISOR_VECTOR_TASKS"},
 		},
 		&cli.StringFlag{

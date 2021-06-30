@@ -3,8 +3,10 @@ package actorstate
 import (
 	"bytes"
 	"context"
+	"sync"
 
 	"github.com/filecoin-project/go-address"
+	"github.com/filecoin-project/sentinel-visor/chain/actors/adt"
 	maddr "github.com/multiformats/go-multiaddr"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/label"
@@ -31,6 +33,31 @@ func init() {
 	}
 }
 
+func ModelExtractors(m model.Persistable) (func(ctx context.Context, ectx *MinerStateExtractionContext) (model.Persistable, error), error) {
+	switch m.(type) {
+	case *minermodel.MinerInfo:
+		return ExtractMinerInfo, nil
+	case *minermodel.MinerFeeDebt:
+		return ExtractMinerFeeDebt, nil
+	case *minermodel.MinerSectorInfo:
+		return ExtractMinerSectorInfo, nil
+	case *minermodel.MinerLockedFund:
+		return ExtractMinerLockedFunds, nil
+	case *minermodel.MinerSectorDeal:
+		return ExtractMinerSectorDeals, nil
+	case *minermodel.MinerSectorEvent:
+		return ExtractMinerSectorEvents, nil
+	case *minermodel.MinerPreCommitInfo:
+		return ExtractMinerPreCommitInfo, nil
+	case *minermodel.MinerCurrentDeadlineInfo:
+		return ExtractMinerCurrentDeadlineInfo, nil
+	case *minermodel.MinerSectorPost:
+		return ExtractMinerPoSts, nil
+	default:
+		return nil, xerrors.Errorf("unrecognized model: %T", m)
+	}
+}
+
 func (m StorageMinerExtractor) Extract(ctx context.Context, a ActorInfo, node ActorStateAPI) (model.Persistable, error) {
 	ctx, span := global.Tracer("").Start(ctx, "StorageMinerExtractor")
 	if span.IsRecording() {
@@ -46,48 +73,21 @@ func (m StorageMinerExtractor) Extract(ctx context.Context, a ActorInfo, node Ac
 		return nil, xerrors.Errorf("creating miner state extraction context: %w", err)
 	}
 
-	minerInfoModel, err := ExtractMinerInfo(ctx, a, ec)
-	if err != nil {
-		return nil, xerrors.Errorf("extracting miner info: %w", err)
+	var out model.PersistableList
+	for _, m := range a.Models {
+		// look up the extraction method required to produce this model.
+		extF, err := ModelExtractors(m)
+		if err != nil {
+			return nil, err
+		}
+		// execute and collect data.
+		data, err := extF(ctx, ec)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, data)
 	}
-
-	lockedFundsModel, err := ExtractMinerLockedFunds(ctx, a, ec)
-	if err != nil {
-		return nil, xerrors.Errorf("extracting miner locked funds: %w", err)
-	}
-
-	feeDebtModel, err := ExtractMinerFeeDebt(ctx, a, ec)
-	if err != nil {
-		return nil, xerrors.Errorf("extracting miner fee debt: %w", err)
-	}
-
-	currDeadlineModel, err := ExtractMinerCurrentDeadlineInfo(ctx, a, ec)
-	if err != nil {
-		return nil, xerrors.Errorf("extracting miner current deadline info: %w", err)
-	}
-
-	preCommitModel, sectorModel, sectorDealsModel, sectorEventsModel, err := ExtractMinerSectorData(ctx, ec, a, node)
-	if err != nil {
-		return nil, xerrors.Errorf("extracting miner sector changes: %w", err)
-	}
-
-	posts, err := ExtractMinerPoSts(ctx, &a, ec, node)
-	if err != nil {
-		return nil, xerrors.Errorf("extracting miner posts: %v", err)
-	}
-
-	return &minermodel.MinerTaskResult{
-		Posts: posts,
-
-		MinerInfoModel:           minerInfoModel,
-		LockedFundsModel:         lockedFundsModel,
-		FeeDebtModel:             feeDebtModel,
-		CurrentDeadlineInfoModel: currDeadlineModel,
-		SectorDealsModel:         sectorDealsModel,
-		SectorEventsModel:        sectorEventsModel,
-		SectorsModel:             sectorModel,
-		PreCommitsModel:          preCommitModel,
-	}, nil
+	return out, nil
 }
 
 func NewMinerStateExtractionContext(ctx context.Context, a ActorInfo, node ActorStateAPI) (*MinerStateExtractionContext, error) {
@@ -132,6 +132,10 @@ func NewMinerStateExtractionContext(ctx context.Context, a ActorInfo, node Actor
 		CurrActor: &a.Actor,
 		CurrState: curState,
 		CurrTs:    a.TipSet,
+		Address:   a.Address,
+		Store:     node.Store(),
+		API:       node,
+		cache:     NewDiffCache(),
 	}, nil
 }
 
@@ -139,16 +143,52 @@ type MinerStateExtractionContext struct {
 	PrevState miner.State
 	PrevTs    *types.TipSet
 
-	CurrActor *types.Actor
 	CurrState miner.State
 	CurrTs    *types.TipSet
+
+	CurrActor *types.Actor
+	Address   address.Address
+
+	Store adt.Store
+	API   ActorStateAPI
+
+	cache *diffCache
+}
+
+func NewDiffCache() *diffCache {
+	return &diffCache{cache: make(map[diffType]interface{})}
+}
+
+type diffCache struct {
+	cacheMu sync.Mutex
+	cache   map[diffType]interface{}
+}
+
+type diffType string
+
+const (
+	PreCommitDiff diffType = "PRECOMMIT"
+	SectorDiff    diffType = "SECTOR"
+)
+
+func (d *diffCache) Put(diff diffType, result interface{}) {
+	d.cacheMu.Lock()
+	defer d.cacheMu.Unlock()
+	d.cache[diff] = result
+}
+
+func (d *diffCache) Get(diffType diffType) (interface{}, bool) {
+	d.cacheMu.Lock()
+	defer d.cacheMu.Unlock()
+	result, found := d.cache[diffType]
+	return result, found
 }
 
 func (m *MinerStateExtractionContext) HasPreviousState() bool {
 	return !(m.CurrTs.Height() == 1 || m.PrevState == m.CurrState)
 }
 
-func ExtractMinerInfo(ctx context.Context, a ActorInfo, ec *MinerStateExtractionContext) (*minermodel.MinerInfo, error) {
+func ExtractMinerInfo(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
 	_, span := global.Tracer("").Start(ctx, "ExtractMinerInfo")
 	defer span.End()
 	if !ec.HasPreviousState() {
@@ -182,13 +222,13 @@ func ExtractMinerInfo(ctx context.Context, a ActorInfo, ec *MinerStateExtraction
 		if err == nil {
 			newMultiAddrs = append(newMultiAddrs, newMaddr.String())
 		} else {
-			log.Debugw("failed to decode miner multiaddr", "miner", a.Address, "multiaddress", addr, "error", err)
+			log.Debugw("failed to decode miner multiaddr", "miner", ec.Address, "multiaddress", addr, "error", err)
 		}
 	}
 	mi := &minermodel.MinerInfo{
 		Height:                  int64(ec.CurrTs.Height()),
-		MinerID:                 a.Address.String(),
-		StateRoot:               a.ParentStateRoot.String(),
+		MinerID:                 ec.Address.String(),
+		StateRoot:               ec.CurrTs.ParentState().String(),
 		OwnerID:                 newInfo.Owner.String(),
 		WorkerID:                newInfo.Worker.String(),
 		NewWorker:               newWorker,
@@ -206,7 +246,7 @@ func ExtractMinerInfo(ctx context.Context, a ActorInfo, ec *MinerStateExtraction
 	return mi, nil
 }
 
-func ExtractMinerLockedFunds(ctx context.Context, a ActorInfo, ec *MinerStateExtractionContext) (*minermodel.MinerLockedFund, error) {
+func ExtractMinerLockedFunds(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
 	_, span := global.Tracer("").Start(ctx, "ExtractMinerLockedFunds")
 	defer span.End()
 	currLocked, err := ec.CurrState.LockedFunds()
@@ -226,15 +266,15 @@ func ExtractMinerLockedFunds(ctx context.Context, a ActorInfo, ec *MinerStateExt
 
 	return &minermodel.MinerLockedFund{
 		Height:            int64(ec.CurrTs.Height()),
-		MinerID:           a.Address.String(),
-		StateRoot:         a.ParentStateRoot.String(),
+		MinerID:           ec.Address.String(),
+		StateRoot:         ec.CurrTs.ParentState().String(),
 		LockedFunds:       currLocked.VestingFunds.String(),
 		InitialPledge:     currLocked.InitialPledgeRequirement.String(),
 		PreCommitDeposits: currLocked.PreCommitDeposits.String(),
 	}, nil
 }
 
-func ExtractMinerFeeDebt(ctx context.Context, a ActorInfo, ec *MinerStateExtractionContext) (*minermodel.MinerFeeDebt, error) {
+func ExtractMinerFeeDebt(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
 	_, span := global.Tracer("").Start(ctx, "ExtractMinerFeeDebt")
 	defer span.End()
 	currDebt, err := ec.CurrState.FeeDebt()
@@ -255,13 +295,13 @@ func ExtractMinerFeeDebt(ctx context.Context, a ActorInfo, ec *MinerStateExtract
 
 	return &minermodel.MinerFeeDebt{
 		Height:    int64(ec.CurrTs.Height()),
-		MinerID:   a.Address.String(),
-		StateRoot: a.ParentStateRoot.String(),
+		MinerID:   ec.Address.String(),
+		StateRoot: ec.CurrTs.ParentState().String(),
 		FeeDebt:   currDebt.String(),
 	}, nil
 }
 
-func ExtractMinerCurrentDeadlineInfo(ctx context.Context, a ActorInfo, ec *MinerStateExtractionContext) (*minermodel.MinerCurrentDeadlineInfo, error) {
+func ExtractMinerCurrentDeadlineInfo(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
 	_, span := global.Tracer("").Start(ctx, "ExtractMinerDeadlineInfo")
 	defer span.End()
 	currDeadlineInfo, err := ec.CurrState.DeadlineInfo(ec.CurrTs.Height())
@@ -281,8 +321,8 @@ func ExtractMinerCurrentDeadlineInfo(ctx context.Context, a ActorInfo, ec *Miner
 
 	return &minermodel.MinerCurrentDeadlineInfo{
 		Height:        int64(ec.CurrTs.Height()),
-		MinerID:       a.Address.String(),
-		StateRoot:     a.ParentStateRoot.String(),
+		MinerID:       ec.Address.String(),
+		StateRoot:     ec.CurrTs.ParentState().String(),
 		DeadlineIndex: currDeadlineInfo.Index,
 		PeriodStart:   int64(currDeadlineInfo.PeriodStart),
 		Open:          int64(currDeadlineInfo.Open),
@@ -292,82 +332,70 @@ func ExtractMinerCurrentDeadlineInfo(ctx context.Context, a ActorInfo, ec *Miner
 	}, nil
 }
 
-func ExtractMinerSectorData(ctx context.Context, ec *MinerStateExtractionContext, a ActorInfo, node ActorStateAPI) (minermodel.MinerPreCommitInfoList, minermodel.MinerSectorInfoList, minermodel.MinerSectorDealList, minermodel.MinerSectorEventList, error) {
-	ctx, span := global.Tracer("").Start(ctx, "ExtractMinerSectorData")
-	defer span.End()
+func getPreCommitDiff(ctx context.Context, ec *MinerStateExtractionContext) (*miner.PreCommitChanges, error) {
 	preCommitChanges := new(miner.PreCommitChanges)
-	preCommitChanges.Added = []miner.SectorPreCommitOnChainInfo{}
-	preCommitChanges.Removed = []miner.SectorPreCommitOnChainInfo{}
-
-	sectorChanges := new(miner.SectorChanges)
-	sectorChanges.Added = []miner.SectorOnChainInfo{}
-	sectorChanges.Removed = []miner.SectorOnChainInfo{}
-	sectorChanges.Extended = []miner.SectorExtensions{}
-
-	sectorDealsModel := minermodel.MinerSectorDealList{}
-	if !ec.HasPreviousState() {
-		msectors, err := ec.CurrState.LoadSectors(nil)
-		if err != nil {
-			return nil, nil, nil, nil, err
-		}
-
-		sectorChanges.Added = make([]miner.SectorOnChainInfo, len(msectors))
-		for idx, sector := range msectors {
-			sectorChanges.Added[idx] = *sector
-			for _, dealID := range sector.DealIDs {
-				sectorDealsModel = append(sectorDealsModel, &minermodel.MinerSectorDeal{
-					Height:   int64(ec.CurrTs.Height()),
-					MinerID:  a.Address.String(),
-					SectorID: uint64(sector.SectorNumber),
-					DealID:   uint64(dealID),
-				})
-			}
-		}
-	} else { // not genesis state, need to diff with previous state to compute changes.
+	result, found := ec.cache.Get(PreCommitDiff)
+	if !found {
 		var err error
-		preCommitChanges, err = miner.DiffPreCommits(ctx, node.Store(), ec.PrevState, ec.CurrState)
+		preCommitChanges, err = miner.DiffPreCommits(ctx, ec.Store, ec.PrevState, ec.CurrState)
 		if err != nil {
-			return nil, nil, nil, nil, xerrors.Errorf("diffing miner precommits: %w", err)
+			return nil, err
 		}
-
-		sectorChanges, err = miner.DiffSectors(ctx, node.Store(), ec.PrevState, ec.CurrState)
-		if err != nil {
-			return nil, nil, nil, nil, xerrors.Errorf("diffing miner sectors: %w", err)
+		ec.cache.Put(PreCommitDiff, preCommitChanges)
+	} else {
+		// a nil diff is a valid result, we want to keep this as to avoid rediffing to get nil
+		if result == nil {
+			return preCommitChanges, nil
 		}
-
-		for _, newSector := range sectorChanges.Added {
-			for _, dealID := range newSector.DealIDs {
-				sectorDealsModel = append(sectorDealsModel, &minermodel.MinerSectorDeal{
-					Height:   int64(ec.CurrTs.Height()),
-					MinerID:  a.Address.String(),
-					SectorID: uint64(newSector.SectorNumber),
-					DealID:   uint64(dealID),
-				})
-			}
-		}
+		preCommitChanges = result.(*miner.PreCommitChanges)
 	}
-	sectorEventModel, err := extractMinerSectorEvents(ctx, node, a, ec, sectorChanges, preCommitChanges)
+	return preCommitChanges, nil
+}
+
+func getSectorDiff(ctx context.Context, ec *MinerStateExtractionContext) (*miner.SectorChanges, error) {
+	sectorChanges := new(miner.SectorChanges)
+	result, found := ec.cache.Get(SectorDiff)
+	if !found {
+		var err error
+		sectorChanges, err = miner.DiffSectors(ctx, ec.Store, ec.PrevState, ec.CurrState)
+		if err != nil {
+			return nil, err
+		}
+		ec.cache.Put(SectorDiff, sectorChanges)
+	} else {
+		// a nil diff is a valid result, we want to keep this as to avoid rediffing to get nil
+		if result == nil {
+			return sectorChanges, nil
+		}
+		sectorChanges = result.(*miner.SectorChanges)
+	}
+	return sectorChanges, nil
+}
+
+func ExtractMinerPreCommitInfo(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
+	if !ec.HasPreviousState() {
+		return nil, nil
+	}
+
+	preCommitChanges, err := getPreCommitDiff(ctx, ec)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, err
 	}
-	// transform the preCommitChanges to a model
+
 	preCommitModel := minermodel.MinerPreCommitInfoList{}
 	for _, added := range preCommitChanges.Added {
 		pcm := &minermodel.MinerPreCommitInfo{
-			Height:    int64(ec.CurrTs.Height()),
-			MinerID:   a.Address.String(),
-			SectorID:  uint64(added.Info.SectorNumber),
-			StateRoot: a.ParentStateRoot.String(),
-
-			SealedCID:       added.Info.SealedCID.String(),
-			SealRandEpoch:   int64(added.Info.SealRandEpoch),
-			ExpirationEpoch: int64(added.Info.Expiration),
-
-			PreCommitDeposit:   added.PreCommitDeposit.String(),
-			PreCommitEpoch:     int64(added.PreCommitEpoch),
-			DealWeight:         added.DealWeight.String(),
-			VerifiedDealWeight: added.VerifiedDealWeight.String(),
-
+			Height:                 int64(ec.CurrTs.Height()),
+			MinerID:                ec.Address.String(),
+			SectorID:               uint64(added.Info.SectorNumber),
+			StateRoot:              ec.CurrTs.ParentState().String(),
+			SealedCID:              added.Info.SealedCID.String(),
+			SealRandEpoch:          int64(added.Info.SealRandEpoch),
+			ExpirationEpoch:        int64(added.Info.Expiration),
+			PreCommitDeposit:       added.PreCommitDeposit.String(),
+			PreCommitEpoch:         int64(added.PreCommitEpoch),
+			DealWeight:             added.DealWeight.String(),
+			VerifiedDealWeight:     added.VerifiedDealWeight.String(),
 			IsReplaceCapacity:      added.Info.ReplaceCapacity,
 			ReplaceSectorDeadline:  added.Info.ReplaceSectorDeadline,
 			ReplaceSectorPartition: added.Info.ReplaceSectorPartition,
@@ -375,15 +403,36 @@ func ExtractMinerSectorData(ctx context.Context, ec *MinerStateExtractionContext
 		}
 		preCommitModel = append(preCommitModel, pcm)
 	}
+	return preCommitModel, nil
+}
 
-	// transform sector changes to a model
+func ExtractMinerSectorInfo(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
+	sectorChanges := new(miner.SectorChanges)
 	sectorModel := minermodel.MinerSectorInfoList{}
+	if !ec.HasPreviousState() {
+		msectors, err := ec.CurrState.LoadSectors(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		sectorChanges.Added = make([]miner.SectorOnChainInfo, len(msectors))
+		for idx, sector := range msectors {
+			sectorChanges.Added[idx] = *sector
+		}
+	} else {
+		var err error
+		sectorChanges, err = getSectorDiff(ctx, ec)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	for _, added := range sectorChanges.Added {
 		sm := &minermodel.MinerSectorInfo{
 			Height:                int64(ec.CurrTs.Height()),
-			MinerID:               a.Address.String(),
+			MinerID:               ec.Address.String(),
 			SectorID:              uint64(added.SectorNumber),
-			StateRoot:             a.ParentStateRoot.String(),
+			StateRoot:             ec.CurrTs.ParentState().String(),
 			SealedCID:             added.SealedCID.String(),
 			ActivationEpoch:       int64(added.Activation),
 			ExpirationEpoch:       int64(added.Expiration),
@@ -400,9 +449,9 @@ func ExtractMinerSectorData(ctx context.Context, ec *MinerStateExtractionContext
 	for _, extended := range sectorChanges.Extended {
 		sm := &minermodel.MinerSectorInfo{
 			Height:                int64(ec.CurrTs.Height()),
-			MinerID:               a.Address.String(),
+			MinerID:               ec.Address.String(),
 			SectorID:              uint64(extended.To.SectorNumber),
-			StateRoot:             a.ParentStateRoot.String(),
+			StateRoot:             ec.CurrTs.ParentState().String(),
 			SealedCID:             extended.To.SealedCID.String(),
 			ActivationEpoch:       int64(extended.To.Activation),
 			ExpirationEpoch:       int64(extended.To.Expiration),
@@ -414,21 +463,91 @@ func ExtractMinerSectorData(ctx context.Context, ec *MinerStateExtractionContext
 		}
 		sectorModel = append(sectorModel, sm)
 	}
-
-	return preCommitModel, sectorModel, sectorDealsModel, sectorEventModel, nil
+	return sectorModel, nil
 }
 
-func ExtractMinerPoSts(ctx context.Context, actor *ActorInfo, ec *MinerStateExtractionContext, node ActorStateAPI) (minermodel.MinerSectorPostList, error) {
+// TODO(frrist): this isn't optimized for perf, in the above method, ExtractMinerSectorInfo, we also call DiffSectors, need to reuse or cache results.
+func ExtractMinerSectorDeals(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
+	sectorChanges := new(miner.SectorChanges)
+	sectorDealsModel := minermodel.MinerSectorDealList{}
+	if !ec.HasPreviousState() {
+		msectors, err := ec.CurrState.LoadSectors(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		sectorChanges.Added = make([]miner.SectorOnChainInfo, len(msectors))
+		for idx, sector := range msectors {
+			sectorChanges.Added[idx] = *sector
+			for _, dealID := range sector.DealIDs {
+				sectorDealsModel = append(sectorDealsModel, &minermodel.MinerSectorDeal{
+					Height:   int64(ec.CurrTs.Height()),
+					MinerID:  ec.Address.String(),
+					SectorID: uint64(sector.SectorNumber),
+					DealID:   uint64(dealID),
+				})
+			}
+		}
+	} else {
+		var err error
+		sectorChanges, err = getSectorDiff(ctx, ec)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, newSector := range sectorChanges.Added {
+		for _, dealID := range newSector.DealIDs {
+			sectorDealsModel = append(sectorDealsModel, &minermodel.MinerSectorDeal{
+				Height:   int64(ec.CurrTs.Height()),
+				MinerID:  ec.Address.String(),
+				SectorID: uint64(newSector.SectorNumber),
+				DealID:   uint64(dealID),
+			})
+		}
+	}
+	return sectorDealsModel, nil
+}
+
+// TODO(frrist): redundant diffing calls here
+func ExtractMinerSectorEvents(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
+	sectorChanges := new(miner.SectorChanges)
+	preCommitChanges := new(miner.PreCommitChanges)
+	if !ec.HasPreviousState() {
+		msectors, err := ec.CurrState.LoadSectors(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		sectorChanges.Added = make([]miner.SectorOnChainInfo, len(msectors))
+		for idx, sector := range msectors {
+			sectorChanges.Added[idx] = *sector
+		}
+	} else {
+		var err error
+		sectorChanges, err = getSectorDiff(ctx, ec)
+		if err != nil {
+			return nil, xerrors.Errorf("diffing miner sectors: %w", err)
+		}
+		preCommitChanges, err = getPreCommitDiff(ctx, ec)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return extractMinerSectorEvents(ctx, ec, sectorChanges, preCommitChanges)
+}
+
+func ExtractMinerPoSts(ctx context.Context, ec *MinerStateExtractionContext) (model.Persistable, error) {
 	ctx, span := global.Tracer("").Start(ctx, "ExtractMinerPoSts")
 	defer span.End()
 	// short circuit genesis state, no PoSt messages in genesis blocks.
 	if !ec.HasPreviousState() {
 		return nil, nil
 	}
-	addr := actor.Address.String()
+	addr := ec.Address.String()
 	posts := make(minermodel.MinerSectorPostList, 0)
-	block := actor.TipSet.Cids()[0]
-	msgs, err := node.ChainGetParentMessages(ctx, block)
+	block := ec.CurrTs.Cids()[0]
+	msgs, err := ec.API.ChainGetParentMessages(ctx, block)
 	if err != nil {
 		return nil, xerrors.Errorf("diffing miner posts: %v", err)
 	}
@@ -455,7 +574,7 @@ func ExtractMinerPoSts(ctx context.Context, actor *ActorInfo, ec *MinerStateExtr
 
 	processPostMsg := func(msg *types.Message) error {
 		sectors := make([]uint64, 0)
-		rcpt, err := node.StateGetReceipt(ctx, msg.Cid(), actor.TipSet.Key())
+		rcpt, err := ec.API.StateGetReceipt(ctx, msg.Cid(), ec.CurrTs.Key())
 		if err != nil {
 			return err
 		}
@@ -505,7 +624,7 @@ func ExtractMinerPoSts(ctx context.Context, actor *ActorInfo, ec *MinerStateExtr
 	}
 
 	for _, msg := range msgs {
-		if msg.Message.To == actor.Address && msg.Message.Method == 5 /* miner.SubmitWindowedPoSt */ {
+		if msg.Message.To == ec.Address && msg.Message.Method == 5 /* miner.SubmitWindowedPoSt */ {
 			if err := processPostMsg(msg.Message); err != nil {
 				return nil, err
 			}
@@ -514,7 +633,7 @@ func ExtractMinerPoSts(ctx context.Context, actor *ActorInfo, ec *MinerStateExtr
 	return posts, nil
 }
 
-func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorInfo, ec *MinerStateExtractionContext, sc *miner.SectorChanges, pc *miner.PreCommitChanges) (minermodel.MinerSectorEventList, error) {
+func extractMinerSectorEvents(ctx context.Context, ec *MinerStateExtractionContext, sc *miner.SectorChanges, pc *miner.PreCommitChanges) (minermodel.MinerSectorEventList, error) {
 	ctx, span := global.Tracer("").Start(ctx, "extractMinerSectorEvents")
 	defer span.End()
 
@@ -543,13 +662,13 @@ func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorIn
 		if err := ps.Removed.ForEach(func(u uint64) error {
 			event := minermodel.SectorTerminated
 			expiration := rmExpireIndex[u]
-			if expiration == a.Epoch {
+			if expiration == ec.CurrTs.Height() {
 				event = minermodel.SectorExpired
 			}
 			out = append(out, &minermodel.MinerSectorEvent{
-				Height:    int64(a.Epoch),
-				MinerID:   a.Address.String(),
-				StateRoot: a.ParentStateRoot.String(),
+				Height:    int64(ec.CurrTs.Height()),
+				MinerID:   ec.Address.String(),
+				StateRoot: ec.CurrTs.ParentState().String(),
 				SectorID:  u,
 				Event:     event,
 			})
@@ -561,9 +680,9 @@ func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorIn
 		// track recovering sectors
 		if err := ps.Recovering.ForEach(func(u uint64) error {
 			out = append(out, &minermodel.MinerSectorEvent{
-				Height:    int64(a.Epoch),
-				MinerID:   a.Address.String(),
-				StateRoot: a.ParentStateRoot.String(),
+				Height:    int64(ec.CurrTs.Height()),
+				MinerID:   ec.Address.String(),
+				StateRoot: ec.CurrTs.ParentState().String(),
 				SectorID:  u,
 				Event:     minermodel.SectorRecovering,
 			})
@@ -575,9 +694,9 @@ func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorIn
 		// track faulted sectors
 		if err := ps.Faulted.ForEach(func(u uint64) error {
 			out = append(out, &minermodel.MinerSectorEvent{
-				Height:    int64(a.Epoch),
-				MinerID:   a.Address.String(),
-				StateRoot: a.ParentStateRoot.String(),
+				Height:    int64(ec.CurrTs.Height()),
+				MinerID:   ec.Address.String(),
+				StateRoot: ec.CurrTs.ParentState().String(),
 				SectorID:  u,
 				Event:     minermodel.SectorFaulted,
 			})
@@ -589,9 +708,9 @@ func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorIn
 		// track recovered sectors
 		if err := ps.Recovered.ForEach(func(u uint64) error {
 			out = append(out, &minermodel.MinerSectorEvent{
-				Height:    int64(a.Epoch),
-				MinerID:   a.Address.String(),
-				StateRoot: a.ParentStateRoot.String(),
+				Height:    int64(ec.CurrTs.Height()),
+				MinerID:   ec.Address.String(),
+				StateRoot: ec.CurrTs.ParentState().String(),
 				SectorID:  u,
 				Event:     minermodel.SectorRecovered,
 			})
@@ -610,9 +729,9 @@ func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorIn
 				event = minermodel.CommitCapacityAdded
 			}
 			out = append(out, &minermodel.MinerSectorEvent{
-				Height:    int64(a.Epoch),
-				MinerID:   a.Address.String(),
-				StateRoot: a.ParentStateRoot.String(),
+				Height:    int64(ec.CurrTs.Height()),
+				MinerID:   ec.Address.String(),
+				StateRoot: ec.CurrTs.ParentState().String(),
 				SectorID:  uint64(add.SectorNumber),
 				Event:     event,
 			})
@@ -622,9 +741,9 @@ func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorIn
 		// track sector extensions
 		for _, mod := range sc.Extended {
 			out = append(out, &minermodel.MinerSectorEvent{
-				Height:    int64(a.Epoch),
-				MinerID:   a.Address.String(),
-				StateRoot: a.ParentStateRoot.String(),
+				Height:    int64(ec.CurrTs.Height()),
+				MinerID:   ec.Address.String(),
+				StateRoot: ec.CurrTs.ParentState().String(),
 				SectorID:  uint64(mod.To.SectorNumber),
 				Event:     minermodel.SectorExtended,
 			})
@@ -637,9 +756,9 @@ func extractMinerSectorEvents(ctx context.Context, node ActorStateAPI, a ActorIn
 		// track precommit addition
 		for _, add := range pc.Added {
 			out = append(out, &minermodel.MinerSectorEvent{
-				Height:    int64(a.Epoch),
-				MinerID:   a.Address.String(),
-				StateRoot: a.ParentStateRoot.String(),
+				Height:    int64(ec.CurrTs.Height()),
+				MinerID:   ec.Address.String(),
+				StateRoot: ec.CurrTs.ParentState().String(),
 				SectorID:  uint64(add.Info.SectorNumber),
 				Event:     minermodel.PreCommitAdded,
 			})

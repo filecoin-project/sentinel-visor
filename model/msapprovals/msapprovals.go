@@ -3,11 +3,16 @@ package msapprovals
 import (
 	"context"
 
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 
 	"github.com/filecoin-project/sentinel-visor/metrics"
 	"github.com/filecoin-project/sentinel-visor/model"
 )
+
+func init() {
+	registry.ModelRegistry.Register(registry.MultisigApprovalsTask, &MultisigApproval{})
+}
 
 type MultisigApproval struct {
 	//lint:ignore U1000 tableName is a convention used by go-pg

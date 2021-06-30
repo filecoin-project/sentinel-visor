@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/api/trace"
@@ -22,6 +23,10 @@ func NewDrandBlockEntries(header *types.BlockHeader) DrandBlockEntries {
 		})
 	}
 	return out
+}
+
+func init() {
+	registry.ModelRegistry.Register(registry.BlocksTask, &DrandBlockEntrie{})
 }
 
 type DrandBlockEntrie struct {

@@ -17,7 +17,7 @@ import (
 
 	"github.com/filecoin-project/sentinel-visor/model"
 	"github.com/filecoin-project/sentinel-visor/model/actors/common"
-	init_ "github.com/filecoin-project/sentinel-visor/model/actors/init"
+	init_ "github.com/filecoin-project/sentinel-visor/model/actors/init_"
 	"github.com/filecoin-project/sentinel-visor/model/actors/market"
 	"github.com/filecoin-project/sentinel-visor/model/actors/miner"
 	"github.com/filecoin-project/sentinel-visor/model/actors/multisig"

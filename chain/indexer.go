@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/filecoin-project/lotus/chain/state"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/sentinel-visor/lens/lotus"
+	modelreg "github.com/filecoin-project/sentinel-visor/model/registry"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"go.opencensus.io/stats"
@@ -29,26 +31,13 @@ import (
 	"github.com/filecoin-project/sentinel-visor/lens"
 	"github.com/filecoin-project/sentinel-visor/metrics"
 	"github.com/filecoin-project/sentinel-visor/model"
+	regmodels "github.com/filecoin-project/sentinel-visor/model/registry/modeltasks"
 	visormodel "github.com/filecoin-project/sentinel-visor/model/visor"
 	"github.com/filecoin-project/sentinel-visor/tasks/actorstate"
 	"github.com/filecoin-project/sentinel-visor/tasks/blocks"
 	"github.com/filecoin-project/sentinel-visor/tasks/chaineconomics"
 	"github.com/filecoin-project/sentinel-visor/tasks/messages"
 	"github.com/filecoin-project/sentinel-visor/tasks/msapprovals"
-)
-
-const (
-	ActorStatesRawTask      = "actorstatesraw"      // task that only extracts raw actor state
-	ActorStatesPowerTask    = "actorstatespower"    // task that only extracts power actor states (but not the raw state)
-	ActorStatesRewardTask   = "actorstatesreward"   // task that only extracts reward actor states (but not the raw state)
-	ActorStatesMinerTask    = "actorstatesminer"    // task that only extracts miner actor states (but not the raw state)
-	ActorStatesInitTask     = "actorstatesinit"     // task that only extracts init actor states (but not the raw state)
-	ActorStatesMarketTask   = "actorstatesmarket"   // task that only extracts market actor states (but not the raw state)
-	ActorStatesMultisigTask = "actorstatesmultisig" // task that only extracts multisig actor states (but not the raw state)
-	BlocksTask              = "blocks"              // task that extracts block data
-	MessagesTask            = "messages"            // task that extracts message data
-	ChainEconomicsTask      = "chaineconomics"      // task that extracts chain economics data
-	MultisigApprovalsTask   = "msapprovals"         // task that extracts multisig actor approvals
 )
 
 var log = logging.Logger("visor/chain")
@@ -79,6 +68,41 @@ func AddressFilterOpt(f *AddressFilter) TipSetIndexerOpt {
 	}
 }
 
+func ModelStringToType(ms string) (model.Persistable, error) {
+	return regmodels.ModelForString(ms)
+}
+
+func ModelsForTopLevelTask(t string) (model.PersistableList, error) {
+	return modelreg.ModelRegistry.ModelsForTask(t)
+}
+
+func ParseTaskString(name string) (string, model.PersistableList, error) {
+	if strings.Contains(name, ":") {
+		tokens := strings.Split(name, ":")
+		if len(tokens) != 2 {
+			return "", nil, xerrors.Errorf("invalid task string format. Invalid: %s", name)
+		}
+		taskName := tokens[0]
+		taskModels := strings.Split(tokens[1], "+")
+		log.Infow("task with subtasks created", "task", taskName, "subtasks", taskModels)
+		var out model.PersistableList
+		for _, tm := range taskModels {
+			m, err := ModelStringToType(tm)
+			if err != nil {
+				return "", nil, err
+			}
+			out = append(out, m)
+		}
+		return taskName, out, nil
+	} else {
+		models, err := ModelsForTopLevelTask(name)
+		if err != nil {
+			return "", nil, err
+		}
+		return name, models, nil
+	}
+}
+
 // A TipSetIndexer extracts block, message and actor state data from a tipset and persists it to storage. Extraction
 // and persistence are concurrent. Extraction of the a tipset can proceed while data from the previous extraction is
 // being persisted. The indexer may be given a time window in which to complete data extraction. The name of the
@@ -96,29 +120,33 @@ func NewTipSetIndexer(o lens.APIOpener, d model.Storage, window time.Duration, n
 	}
 
 	for _, task := range tasks {
-		switch task {
-		case BlocksTask:
-			tsi.processors[BlocksTask] = blocks.NewTask()
-		case MessagesTask:
-			tsi.messageProcessors[MessagesTask] = messages.NewTask()
-		case ChainEconomicsTask:
-			tsi.processors[ChainEconomicsTask] = chaineconomics.NewTask(o)
-		case ActorStatesRawTask:
-			tsi.actorProcessors[ActorStatesRawTask] = actorstate.NewTask(o, &actorstate.RawActorExtractorMap{})
-		case ActorStatesPowerTask:
-			tsi.actorProcessors[ActorStatesPowerTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(power.AllCodes()))
-		case ActorStatesRewardTask:
-			tsi.actorProcessors[ActorStatesRewardTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(reward.AllCodes()))
-		case ActorStatesMinerTask:
-			tsi.actorProcessors[ActorStatesMinerTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(miner.AllCodes()))
-		case ActorStatesInitTask:
-			tsi.actorProcessors[ActorStatesInitTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(init_.AllCodes()))
-		case ActorStatesMarketTask:
-			tsi.actorProcessors[ActorStatesMarketTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(market.AllCodes()))
-		case ActorStatesMultisigTask:
-			tsi.actorProcessors[ActorStatesMultisigTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(multisig.AllCodes()))
-		case MultisigApprovalsTask:
-			tsi.messageProcessors[MultisigApprovalsTask] = msapprovals.NewTask(o)
+		taskName, models, err := ParseTaskString(task)
+		if err != nil {
+			return nil, err
+		}
+		switch taskName {
+		case modelreg.BlocksTask:
+			tsi.processors[modelreg.BlocksTask] = blocks.NewTask()
+		case modelreg.MessagesTask:
+			tsi.messageProcessors[modelreg.MessagesTask] = messages.NewTask()
+		case modelreg.ChainEconomicsTask:
+			tsi.processors[modelreg.ChainEconomicsTask] = chaineconomics.NewTask(o)
+		case modelreg.ActorStatesRawTask:
+			tsi.actorProcessors[modelreg.ActorStatesRawTask] = actorstate.NewTask(o, &actorstate.RawActorExtractorMap{})
+		case modelreg.ActorStatesPowerTask:
+			tsi.actorProcessors[modelreg.ActorStatesPowerTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(power.AllCodes()), models...)
+		case modelreg.ActorStatesRewardTask:
+			tsi.actorProcessors[modelreg.ActorStatesRewardTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(reward.AllCodes()), models...)
+		case modelreg.ActorStatesMinerTask:
+			tsi.actorProcessors[modelreg.ActorStatesMinerTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(miner.AllCodes()), models...)
+		case modelreg.ActorStatesInitTask:
+			tsi.actorProcessors[modelreg.ActorStatesInitTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(init_.AllCodes()), models...)
+		case modelreg.ActorStatesMarketTask:
+			tsi.actorProcessors[modelreg.ActorStatesMarketTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(market.AllCodes()), models...)
+		case modelreg.ActorStatesMultisigTask:
+			tsi.actorProcessors[modelreg.ActorStatesMultisigTask] = actorstate.NewTask(o, actorstate.NewTypedActorExtractorMap(multisig.AllCodes()), models...)
+		case modelreg.MultisigApprovalsTask:
+			tsi.messageProcessors[modelreg.MultisigApprovalsTask] = msapprovals.NewTask(o)
 		default:
 			return nil, xerrors.Errorf("unknown task: %s", task)
 		}

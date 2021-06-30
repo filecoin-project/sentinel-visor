@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/filecoin-project/sentinel-visor/chain/actors/builtin"
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 
 	itestkit "github.com/filecoin-project/lotus/itests/kit"
 	"github.com/go-pg/pg/v10"
@@ -57,7 +58,7 @@ func TestWalker(t *testing.T) {
 	strg, err := storage.NewDatabaseFromDB(ctx, db, "public")
 	require.NoError(t, err, "NewDatabaseFromDB")
 
-	tsIndexer, err := NewTipSetIndexer(opener, strg, builtin.EpochDurationSeconds*time.Second, t.Name(), []string{BlocksTask})
+	tsIndexer, err := NewTipSetIndexer(opener, strg, builtin.EpochDurationSeconds*time.Second, t.Name(), []string{registry.BlocksTask})
 	require.NoError(t, err, "NewTipSetIndexer")
 	t.Logf("initializing indexer")
 	idx := NewWalker(tsIndexer, opener, 0, int64(head.Height()))

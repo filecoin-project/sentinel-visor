@@ -3,6 +3,7 @@ package miner
 import (
 	"context"
 
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/api/trace"
@@ -27,6 +28,10 @@ const (
 	SectorExpired    = "SECTOR_EXPIRED"
 	SectorTerminated = "SECTOR_TERMINATED"
 )
+
+func init() {
+	registry.ModelRegistry.Register(registry.ActorStatesMinerTask, &MinerSectorEvent{})
+}
 
 type MinerSectorEvent struct {
 	Height    int64  `pg:",pk,notnull,use_zero"`

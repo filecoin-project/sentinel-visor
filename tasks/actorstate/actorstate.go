@@ -24,6 +24,8 @@ type ActorInfo struct {
 	Epoch           abi.ChainEpoch
 	TipSet          *types.TipSet
 	ParentTipSet    *types.TipSet
+
+	Models model.PersistableList
 }
 
 // ActorStateAPI is the minimal subset of lens.API that is needed for actor state extraction

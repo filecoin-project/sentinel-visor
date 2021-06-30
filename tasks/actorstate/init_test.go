@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	initmodel "github.com/filecoin-project/sentinel-visor/model/actors/init"
+	initmodel "github.com/filecoin-project/sentinel-visor/model/actors/init_"
 	"github.com/filecoin-project/sentinel-visor/tasks/actorstate"
 )
 

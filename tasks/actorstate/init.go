@@ -10,7 +10,7 @@ import (
 
 	init_ "github.com/filecoin-project/sentinel-visor/chain/actors/builtin/init"
 	"github.com/filecoin-project/sentinel-visor/model"
-	initmodel "github.com/filecoin-project/sentinel-visor/model/actors/init"
+	initmodel "github.com/filecoin-project/sentinel-visor/model/actors/init_"
 )
 
 // was services/processor/tasks/init/init_actor.go

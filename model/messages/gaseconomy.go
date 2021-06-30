@@ -3,12 +3,17 @@ package messages
 import (
 	"context"
 
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 	"golang.org/x/xerrors"
 
 	"github.com/filecoin-project/sentinel-visor/metrics"
 	"github.com/filecoin-project/sentinel-visor/model"
 )
+
+func init() {
+	registry.ModelRegistry.Register(registry.MessagesTask, &MessageGasEconomy{})
+}
 
 type MessageGasEconomy struct {
 	//lint:ignore U1000 tableName is a convention used by go-pg

@@ -29,12 +29,15 @@ type Task struct {
 	closer lens.APICloser
 
 	extracterMap ActorExtractorMap
+
+	models model.PersistableList
 }
 
-func NewTask(opener lens.APIOpener, extracterMap ActorExtractorMap) *Task {
+func NewTask(opener lens.APIOpener, extracterMap ActorExtractorMap, models ...model.Persistable) *Task {
 	p := &Task{
 		opener:       opener,
 		extracterMap: extracterMap,
+		models:       models,
 	}
 	return p
 }
@@ -159,6 +162,7 @@ func (t *Task) runActorStateExtraction(ctx context.Context, ts *types.TipSet, pt
 		Epoch:           ts.Height(),
 		TipSet:          ts,
 		ParentTipSet:    pts,
+		Models:          t.models,
 	}
 
 	extracter, ok := t.extracterMap.GetExtractor(act.Code)

@@ -5,8 +5,13 @@ import (
 
 	"github.com/filecoin-project/sentinel-visor/metrics"
 	"github.com/filecoin-project/sentinel-visor/model"
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 )
+
+func init() {
+	registry.ModelRegistry.Register(registry.ActorStatesMultisigTask, &MultisigTransaction{})
+}
 
 type MultisigTransaction struct {
 	MultisigID    string `pg:",pk,notnull"`

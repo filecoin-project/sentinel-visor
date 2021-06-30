@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/filecoin-project/sentinel-visor/chain/actors/builtin"
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
@@ -67,7 +68,7 @@ func TestWatcher(t *testing.T) {
 	strg, err := storage.NewDatabaseFromDB(ctx, db, "public")
 	require.NoError(t, err, "NewDatabaseFromDB")
 
-	tsIndexer, err := NewTipSetIndexer(opener, strg, builtin.EpochDurationSeconds*time.Second, t.Name(), []string{BlocksTask})
+	tsIndexer, err := NewTipSetIndexer(opener, strg, builtin.EpochDurationSeconds*time.Second, t.Name(), []string{registry.BlocksTask})
 	require.NoError(t, err, "NewTipSetIndexer")
 	t.Logf("initializing indexer")
 	idx := NewWatcher(tsIndexer, NullHeadNotifier{}, 0)

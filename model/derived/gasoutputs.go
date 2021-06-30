@@ -3,6 +3,7 @@ package derived
 import (
 	"context"
 
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/api/trace"
@@ -12,6 +13,10 @@ import (
 	"github.com/filecoin-project/sentinel-visor/metrics"
 	"github.com/filecoin-project/sentinel-visor/model"
 )
+
+func init() {
+	registry.ModelRegistry.Register(registry.MessagesTask, &GasOutputs{})
+}
 
 type GasOutputs struct {
 	//lint:ignore U1000 tableName is a convention used by go-pg

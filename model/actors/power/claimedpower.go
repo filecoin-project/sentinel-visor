@@ -3,6 +3,7 @@ package power
 import (
 	"context"
 
+	"github.com/filecoin-project/sentinel-visor/model/registry"
 	"go.opencensus.io/tag"
 	"go.opentelemetry.io/otel/api/global"
 	"golang.org/x/xerrors"
@@ -10,6 +11,10 @@ import (
 	"github.com/filecoin-project/sentinel-visor/metrics"
 	"github.com/filecoin-project/sentinel-visor/model"
 )
+
+func init() {
+	registry.ModelRegistry.Register(registry.ActorStatesPowerTask, &PowerActorClaim{})
+}
 
 type PowerActorClaim struct {
 	Height          int64  `pg:",pk,notnull,use_zero"`
