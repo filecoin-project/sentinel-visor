@@ -129,6 +129,11 @@ var verifregTable = methodtable{
 	6: methodMeta{"RestoreBytes", types.Type.MessageParamsVerifregUseBytes__Repr},
 }
 
+var cronTable = methodtable{
+	1: methodMeta{"Constructor", types.Type.Any__Repr},
+	2: methodMeta{"EpochTick", types.Type.Any__Repr},
+}
+
 // LotusType represents known types
 type LotusType string
 
@@ -160,7 +165,7 @@ const (
 
 var messageParamTable = map[cid.Cid]methodtable{
 	sa0builtin.AccountActorCodeID:          {},
-	sa0builtin.CronActorCodeID:             {},
+	sa0builtin.CronActorCodeID:             cronTable,
 	sa0builtin.InitActorCodeID:             initTable,
 	sa0builtin.MultisigActorCodeID:         multisigTable,
 	sa0builtin.PaymentChannelActorCodeID:   paychTable,
@@ -173,7 +178,7 @@ var messageParamTable = map[cid.Cid]methodtable{
 
 	// v2
 	sa2builtin.AccountActorCodeID:          {},
-	sa2builtin.CronActorCodeID:             {},
+	sa2builtin.CronActorCodeID:             cronTable,
 	sa2builtin.InitActorCodeID:             initTable,
 	sa2builtin.MultisigActorCodeID:         multisigTable,
 	sa2builtin.PaymentChannelActorCodeID:   paychTable,
@@ -186,7 +191,7 @@ var messageParamTable = map[cid.Cid]methodtable{
 
 	// v3
 	sa3builtin.AccountActorCodeID:          {},
-	sa3builtin.CronActorCodeID:             {},
+	sa3builtin.CronActorCodeID:             cronTable,
 	sa3builtin.InitActorCodeID:             initTable,
 	sa3builtin.MultisigActorCodeID:         multisigTable,
 	sa3builtin.PaymentChannelActorCodeID:   paychTable,
@@ -199,7 +204,7 @@ var messageParamTable = map[cid.Cid]methodtable{
 
 	// v4
 	sa4builtin.AccountActorCodeID:          {},
-	sa4builtin.CronActorCodeID:             {},
+	sa4builtin.CronActorCodeID:             cronTable,
 	sa4builtin.InitActorCodeID:             initTable,
 	sa4builtin.MultisigActorCodeID:         multisigTable,
 	sa4builtin.PaymentChannelActorCodeID:   paychTable,
@@ -212,7 +217,7 @@ var messageParamTable = map[cid.Cid]methodtable{
 
 	// v5
 	sa5builtin.AccountActorCodeID:          {},
-	sa5builtin.CronActorCodeID:             {},
+	sa5builtin.CronActorCodeID:             cronTable,
 	sa5builtin.InitActorCodeID:             initTable,
 	sa5builtin.MultisigActorCodeID:         multisigTable,
 	sa5builtin.PaymentChannelActorCodeID:   paychTable,

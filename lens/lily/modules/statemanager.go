@@ -97,7 +97,6 @@ func (b *BufferedExecMonitor) ExecutionFor(ts *types.TipSet) ([]*BufferedExecuti
 
 	exe, found := b.cache.Get(ts.Key())
 	if !found {
-		log.Errorw("failed to find execution", "tipset", ts.String())
 		return nil, ExecutionTraceNotFound
 	}
 	return exe.([]*BufferedExecution), nil
