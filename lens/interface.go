@@ -20,6 +20,7 @@ type API interface {
 	StateAPI
 
 	GetExecutedAndBlockMessagesForTipset(ctx context.Context, ts, pts *types.TipSet) (*TipSetMessages, error)
+	GetMessageExecutionsForTipSet(ctx context.Context, ts, pts *types.TipSet) ([]*MessageExecution, error)
 }
 
 type StoreAPI interface {
@@ -62,11 +63,26 @@ type APICloser func()
 
 type APIOpener interface {
 	Open(context.Context) (API, APICloser, error)
+	Daemonized() bool
 }
 
 type TipSetMessages struct {
 	Executed []*ExecutedMessage
 	Block    []*BlockMessages
+}
+
+type MessageExecution struct {
+	Cid       cid.Cid
+	StateRoot cid.Cid
+	Height    abi.ChainEpoch
+
+	Message *types.Message
+	Ret     *vm.ApplyRet
+
+	FromActorCode cid.Cid // code of the actor the message is from
+	ToActorCode   cid.Cid // code of the actor the message is to
+
+	Implicit bool
 }
 
 type ExecutedMessage struct {

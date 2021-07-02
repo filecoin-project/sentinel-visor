@@ -110,6 +110,10 @@ func (o *APIOpener) Open(ctx context.Context) (lens.API, lens.APICloser, error) 
 	return lensAPI, lens.APICloser(closer), nil
 }
 
+func (o *APIOpener) Daemonized() bool {
+	return false
+}
+
 func apiURI(addr string) string {
 	return "ws://" + addr + "/rpc/v0"
 }

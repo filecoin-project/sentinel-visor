@@ -8,6 +8,7 @@ import (
 	paramfetch "github.com/filecoin-project/go-paramfetch"
 	lotusbuild "github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/events"
+	"github.com/filecoin-project/lotus/chain/stmgr"
 	lcli "github.com/filecoin-project/lotus/cli"
 	"github.com/filecoin-project/lotus/lib/lotuslog"
 	"github.com/filecoin-project/lotus/lib/peermgr"
@@ -157,6 +158,11 @@ var DaemonCmd = &cli.Command{
 			node.Online(),
 			node.Repo(r),
 
+			// Inject a custom StateManager, must be done after the node.Online() call as we are
+			// overriding the OG lotus StateManager.
+			node.Override(new(*stmgr.StateManager), modules.StateManager),
+			node.Override(new(stmgr.ExecMonitor), modules.NewBufferedExecMonitor),
+			// End custom StateManager injection.
 			genesis,
 			liteModeDeps,
 

@@ -100,10 +100,18 @@ func (o *APIOpener) Open(ctx context.Context) (lens.API, lens.APICloser, error) 
 	return o.rapi, lens.APICloser(func() {}), nil
 }
 
+func (o *APIOpener) Daemonized() bool {
+	return false
+}
+
 type RepoAPI struct {
 	impl.FullNodeAPI
 	context.Context
 	cacheSize int
+}
+
+func (ra *RepoAPI) GetMessageExecutionsForTipSet(ctx context.Context, ts, pts *types.TipSet) ([]*lens.MessageExecution, error) {
+	panic("implement me")
 }
 
 func (ra *RepoAPI) GetExecutedAndBlockMessagesForTipset(ctx context.Context, ts, pts *types.TipSet) (*lens.TipSetMessages, error) {
