@@ -375,9 +375,10 @@ func GetExecutedAndBlockMessagesForTipset(ctx context.Context, cs *store.ChainSt
 
 	// Create a skeleton vm just for calling ShouldBurn
 	vmi, err := vm.NewVM(ctx, &vm.VMOpts{
-		StateBase: pts.ParentState(),
-		Epoch:     pts.Height(),
-		Bstore:    cs.StateBlockstore(),
+		StateBase:   pts.ParentState(),
+		Epoch:       pts.Height(),
+		Bstore:      cs.StateBlockstore(),
+		NtwkVersion: DefaultNetwork.Version,
 	})
 	if err != nil {
 		return nil, xerrors.Errorf("creating temporary vm: %w", err)
