@@ -51,6 +51,20 @@ const (
 	MultisigApprovalsTask   = "msapprovals"         // task that extracts multisig actor approvals
 )
 
+var AllTasks = []string{
+	ActorStatesRawTask,
+	ActorStatesPowerTask,
+	ActorStatesRewardTask,
+	ActorStatesMinerTask,
+	ActorStatesInitTask,
+	ActorStatesMarketTask,
+	ActorStatesMultisigTask,
+	BlocksTask,
+	MessagesTask,
+	ChainEconomicsTask,
+	MultisigApprovalsTask,
+}
+
 var log = logging.Logger("visor/chain")
 
 var _ TipSetObserver = (*TipSetIndexer)(nil)

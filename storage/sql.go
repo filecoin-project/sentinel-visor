@@ -180,6 +180,12 @@ func (d *Database) Connect(ctx context.Context) error {
 	return nil
 }
 
+// MUST call Connect before using
+// TODO(frrist): this is lazy, but good enough to MVP
+func (d *Database) AsORM() *pg.DB {
+	return d.db
+}
+
 func connect(ctx context.Context, opt *pg.Options) (*pg.DB, error) {
 	db := pg.Connect(opt)
 	db = db.WithContext(ctx)

@@ -24,6 +24,8 @@ type LilyAPI interface {
 	LilyJobStop(ctx context.Context, ID schedule.JobID) error
 	LilyJobList(ctx context.Context) ([]schedule.JobResult, error)
 
+	LilyGapFind(ctx context.Context, cfg *LilyGapFindConfig) (schedule.JobID, error)
+
 	// SyncState returns the current status of the chain sync system.
 	SyncState(context.Context) (*api.SyncState, error) //perm:read
 
@@ -67,4 +69,12 @@ type LilyWalkConfig struct {
 	RestartOnCompletion bool
 	RestartDelay        time.Duration
 	Storage             string // name of storage system to use, may be empty
+}
+
+type LilyGapFindConfig struct {
+	RestartOnFailure    bool
+	RestartOnCompletion bool
+	RestartDelay        time.Duration
+	Storage             string // name of storage system to use, cannot be empty and must be Database storage.
+	// TODO we could have a read and a write storage, this would allow gaps to be written to a csv, although we lack the capability of gap filling from csv.
 }
