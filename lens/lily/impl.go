@@ -135,6 +135,21 @@ func (m *LilyNodeAPI) LilyGapFind(_ context.Context, cfg *LilyGapFindConfig) (sc
 
 	return id, nil
 }
+
+func (m *LilyNodeAPI) LilyGapFill(_ context.Context, cfg *LilyGapFillConfig) (schedule.JobID, error) {
+	// the context's passed to these methods live for the duration of the clients request, so make a new one.
+	ctx := context.Background()
+
+	// create a database connection for this watch, ensure its pingable, and run migrations if needed/configured to.
+	db, err := m.StorageCatalog.ConnectAsDatabase(ctx, cfg.Storage)
+	if err != nil {
+		return schedule.InvalidJobID, err
+	}
+
+	id := m.Scheduler.Submit(&schedule.JobConfig{
+		Name:                fmt.Sprintf("gapfill_%d", time.Now().UTC().Unix()),
+		Tasks:               cfg.Tasks,
+		Job:                 gap.NewGapFiller(m, db, cfg.Tasks),
 		RestartOnFailure:    cfg.RestartOnFailure,
 		RestartOnCompletion: cfg.RestartOnCompletion,
 		RestartDelay:        cfg.RestartDelay,

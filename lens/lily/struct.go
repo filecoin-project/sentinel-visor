@@ -35,6 +35,7 @@ type LilyAPIStruct struct {
 		LilyJobList  func(ctx context.Context) ([]schedule.JobResult, error) `perm:"read"`
 
 		LilyGapFind func(ctx context.Context, cfg *LilyGapFindConfig) (schedule.JobID, error) `perm:"read"`
+		LilyGapFill func(ctx context.Context, cfg *LilyGapFillConfig) (schedule.JobID, error) `perm:"read"`
 
 		Shutdown func(context.Context) error `perm:"read"`
 
@@ -80,6 +81,10 @@ func (s *LilyAPIStruct) LilyJobList(ctx context.Context) ([]schedule.JobResult, 
 
 func (s *LilyAPIStruct) LilyGapFind(ctx context.Context, cfg *LilyGapFindConfig) (schedule.JobID, error) {
 	return s.Internal.LilyGapFind(ctx, cfg)
+}
+
+func (s *LilyAPIStruct) LilyGapFill(ctx context.Context, cfg *LilyGapFillConfig) (schedule.JobID, error) {
+	return s.Internal.LilyGapFill(ctx, cfg)
 }
 
 func (s *LilyAPIStruct) Shutdown(ctx context.Context) error {
