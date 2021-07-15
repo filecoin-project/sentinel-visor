@@ -133,6 +133,7 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			commands.DaemonCmd,
+			commands.GapCmd,
 			commands.InitCmd,
 			commands.JobCmd,
 			commands.LogCmd,

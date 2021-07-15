@@ -7,6 +7,7 @@ import (
 
 	"github.com/filecoin-project/sentinel-visor/config"
 	"github.com/filecoin-project/sentinel-visor/model"
+	"golang.org/x/xerrors"
 )
 
 type Connector interface {
@@ -94,4 +95,19 @@ func (c *Catalog) Connect(ctx context.Context, name string) (model.Storage, erro
 	}
 
 	return s, nil
+}
+
+// ConnectAsDatabase returns a storage that is ready to use for reading and writing: `name` must corresponds to
+// a Database storage.
+func (c *Catalog) ConnectAsDatabase(ctx context.Context, name string) (*Database, error) {
+	strg, err := c.Connect(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	db, ok := strg.(*Database)
+	if !ok {
+		return nil, xerrors.Errorf("connecting to storage as database. unexpected type: %T", strg)
+	}
+	return db, nil
 }
