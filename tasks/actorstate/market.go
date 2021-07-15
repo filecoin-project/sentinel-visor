@@ -225,6 +225,25 @@ func ExtractMarketDealStates(ctx context.Context, ec *MarketStateExtractionConte
 		idx++
 	}
 	for _, mod := range changes.Modified {
+		// The market actor cron updates deal's LastUpdatedEpoch on
+		// every run:
+		// https://github.com/filecoin-project/specs-actors/blob/0bf4d26701c5ccf295f73b0f98650f1a2dcb5d69/actors/builtin/market/market_actor.go#L577
+		//
+		// This is used to calculate pending paypment amounts:
+		// https://github.com/filecoin-project/specs-actors/blob/0bf4d26701c5ccf295f73b0f98650f1a2dcb5d69/actors/builtin/market/market_state.go#L132-L134
+		//
+		// However, this is not useful information for sentinel and
+		// results in a huge number of entries in the
+		// market_deal_states table.  What is most useful is to know
+		// when a deal was activated (first entry of the deal in the
+		// table), and when a deal was slashed (SlashEpoch > 0 and possibly last entry in the table).
+		//
+		// Therefore, we conciously forget any "updates" that do not
+		// have a positive slash epoch, as things otherwise simply
+		// correspond to market actor cron ticks.
+		if mod.To.SlashEpoch <= 0 {
+			continue
+		}
 		out[idx] = &marketmodel.MarketDealState{
 			Height:           int64(ec.CurrTs.Height()),
 			DealID:           uint64(mod.ID),
