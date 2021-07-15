@@ -66,12 +66,8 @@ build: deps visor
 deps: $(BUILD_DEPS)
 
 .PHONY: vector-setup
-vector-setup: ./vector/data/.complete
-
-./vector/data/.complete:
+vector-setup:
 	cd ./vector; ./fetch_vectors.sh
-	touch $@
-CLEAN+=./vector/data/.complete
 CLEAN+=./vector/data/*.json
 
 # test starts dependencies and runs all tests

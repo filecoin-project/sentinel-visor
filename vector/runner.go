@@ -123,6 +123,7 @@ func (r *Runner) Validate(ctx context.Context) error {
 	actual := r.storage.Data
 	expected := r.schema.Exp.Models
 
+	var errStr []string
 	for expTable, expData := range expected {
 		if expTable == "visor_processing_reports" {
 			continue
@@ -141,9 +142,13 @@ func (r *Runner) Validate(ctx context.Context) error {
 		if diff != "" {
 			log.Errorf("Validate Model %s: Failed\n", expTable)
 			fmt.Println(diff)
+			errStr = append(errStr, fmt.Sprintf("failed to validate model: %s\n", expTable))
 		} else {
 			log.Infof("Validate Model %s: Passed\n", expTable)
 		}
+	}
+	if len(errStr) > 0 {
+		return xerrors.Errorf("validation failed: %s", errStr)
 	}
 	return nil
 }

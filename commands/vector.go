@@ -27,6 +27,12 @@ var BuildVectorCmd = &cli.Command{
 	Name:  "build",
 	Usage: "Create a vector.",
 	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:    "lens-repo",
+			EnvVars: []string{"VISOR_LENS_REPO"},
+			Value:   "~/.lotus", // TODO: Consider XDG_DATA_HOME
+			Usage:   "The path of a repo to be opened by the lens",
+		},
 		&cli.Int64Flag{
 			Name:    "from",
 			Usage:   "Limit actor and message processing to tipsets at or above `HEIGHT`",
