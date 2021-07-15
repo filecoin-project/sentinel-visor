@@ -27,8 +27,9 @@ type LilyAPIStruct struct {
 		Store                                func() adt.Store                                                                  `perm:"read"`
 		GetExecutedAndBlockMessagesForTipset func(context.Context, *types.TipSet, *types.TipSet) (*lens.TipSetMessages, error) `perm:"read"`
 
-		LilyWatch func(context.Context, *LilyWatchConfig) (schedule.JobID, error) `perm:"read"`
-		LilyWalk  func(context.Context, *LilyWalkConfig) (schedule.JobID, error)  `perm:"read"`
+		LilyWatch   func(context.Context, *LilyWatchConfig) (schedule.JobID, error)   `perm:"read"`
+		LilyWalk    func(context.Context, *LilyWalkConfig) (schedule.JobID, error)    `perm:"read"`
+		LilyObserve func(context.Context, *LilyObserveConfig) (schedule.JobID, error) `perm:"read"`
 
 		LilyJobStart func(ctx context.Context, ID schedule.JobID) error      `perm:"read"`
 		LilyJobStop  func(ctx context.Context, ID schedule.JobID) error      `perm:"read"`
@@ -62,6 +63,10 @@ func (s *LilyAPIStruct) LilyWatch(ctx context.Context, cfg *LilyWatchConfig) (sc
 
 func (s *LilyAPIStruct) LilyWalk(ctx context.Context, cfg *LilyWalkConfig) (schedule.JobID, error) {
 	return s.Internal.LilyWalk(ctx, cfg)
+}
+
+func (s *LilyAPIStruct) LilyObserve(ctx context.Context, cfg *LilyObserveConfig) (schedule.JobID, error) {
+	return s.Internal.LilyObserve(ctx, cfg)
 }
 
 func (s *LilyAPIStruct) LilyJobStart(ctx context.Context, ID schedule.JobID) error {

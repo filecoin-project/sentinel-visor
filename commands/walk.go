@@ -118,7 +118,7 @@ var WalkCmd = &cli.Command{
 		if err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(os.Stdout, "Created Watch Job: %d", watchID); err != nil {
+		if _, err := fmt.Fprintf(os.Stdout, "Created Watch Job: %d\n", watchID); err != nil {
 			return err
 		}
 		return nil
