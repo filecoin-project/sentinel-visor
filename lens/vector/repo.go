@@ -104,6 +104,9 @@ type APIOpener struct {
 func (o *APIOpener) Open(ctx context.Context) (lens.API, lens.APICloser, error) {
 	return o.capi, lens.APICloser(func() {}), nil
 }
+func (o *APIOpener) Daemonized() bool {
+	return false
+}
 
 func (o *APIOpener) CaptureAsCAR(ctx context.Context, w io.Writer, roots ...cid.Cid) error {
 	carWalkFn := func(nd format.Node) (out []*format.Link, err error) {
@@ -134,6 +137,10 @@ type CaptureAPI struct {
 	cacheSize int
 
 	tbs *TracingBlockstore
+}
+
+func (c *CaptureAPI) GetMessageExecutionsForTipSet(ctx context.Context, ts, pts *types.TipSet) ([]*lens.MessageExecution, error) {
+	panic("implement me")
 }
 
 func (c *CaptureAPI) Store() adt.Store {

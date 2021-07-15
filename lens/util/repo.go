@@ -1,9 +1,11 @@
 package util
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-fil-markets/storagemarket"
@@ -26,16 +28,23 @@ import (
 	"github.com/filecoin-project/lotus/node/modules"
 	"github.com/filecoin-project/lotus/node/repo"
 	builtininit "github.com/filecoin-project/sentinel-visor/chain/actors/builtin/init"
+	"github.com/filecoin-project/sentinel-visor/tasks/messages"
+	"github.com/filecoin-project/sentinel-visor/tasks/messages/fcjson"
 	"github.com/filecoin-project/specs-actors/actors/runtime/proof"
 	"github.com/filecoin-project/specs-actors/actors/util/adt"
+	"github.com/filecoin-project/specs-actors/v5/actors/builtin"
 	proof5 "github.com/filecoin-project/specs-actors/v5/actors/runtime/proof"
 	"github.com/ipfs/go-cid"
 	dstore "github.com/ipfs/go-datastore"
+	logging "github.com/ipfs/go-log/v2"
+	"github.com/ipld/go-ipld-prime"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	"golang.org/x/xerrors"
 
 	"github.com/filecoin-project/sentinel-visor/lens"
 )
+
+var log = logging.Logger("lens/util")
 
 type APIOpener struct {
 	// shared instance of the repo since the opener holds an exclusive lock on it
@@ -110,11 +119,19 @@ func (o *APIOpener) Open(ctx context.Context) (lens.API, lens.APICloser, error) 
 	return o.rapi, lens.APICloser(func() {}), nil
 }
 
+func (o *APIOpener) Daemonized() bool {
+	return false
+}
+
 type LensAPI struct {
 	impl.FullNodeAPI
 	context.Context
 	cacheSize int
 	cs        *store.ChainStore
+}
+
+func (ra *LensAPI) GetMessageExecutionsForTipSet(ctx context.Context, ts, pts *types.TipSet) ([]*lens.MessageExecution, error) {
+	panic("implement me")
 }
 
 func (ra *LensAPI) GetExecutedAndBlockMessagesForTipset(ctx context.Context, ts, pts *types.TipSet) (*lens.TipSetMessages, error) {
@@ -251,47 +268,9 @@ func GetExecutedAndBlockMessagesForTipset(ctx context.Context, cs *store.ChainSt
 		return nil, xerrors.Errorf("child tipset (%s) is not on the same chain as parent (%s)", ts.Key(), pts.Key())
 	}
 
-	stateTree, err := state.LoadStateTree(cs.ActorStore(ctx), ts.ParentState())
+	getActorCode, err := MakeGetActorCodeFunc(ctx, cs.ActorStore(ctx), ts, pts)
 	if err != nil {
-		return nil, xerrors.Errorf("load state tree: %w", err)
-	}
-
-	parentStateTree, err := state.LoadStateTree(cs.ActorStore(ctx), pts.ParentState())
-	if err != nil {
-		return nil, xerrors.Errorf("load state tree: %w", err)
-	}
-
-	initActor, err := stateTree.GetActor(builtininit.Address)
-	if err != nil {
-		return nil, xerrors.Errorf("getting init actor: %w", err)
-	}
-
-	initActorState, err := builtininit.Load(cs.ActorStore(ctx), initActor)
-	if err != nil {
-		return nil, xerrors.Errorf("loading init actor state: %w", err)
-	}
-
-	// Build a lookup of actor codes
-	actorCodes := map[address.Address]cid.Cid{}
-	if err := stateTree.ForEach(func(a address.Address, act *types.Actor) error {
-		actorCodes[a] = act.Code
-		return nil
-	}); err != nil {
-		return nil, xerrors.Errorf("iterate actors: %w", err)
-	}
-
-	getActorCode := func(a address.Address) cid.Cid {
-		ra, found, err := initActorState.ResolveAddress(a)
-		if err != nil || !found {
-			return cid.Undef
-		}
-
-		c, ok := actorCodes[ra]
-		if ok {
-			return c
-		}
-
-		return cid.Undef
+		return nil, err
 	}
 
 	// Build a lookup of which blocks each message appears in
@@ -336,6 +315,15 @@ func GetExecutedAndBlockMessagesForTipset(ctx context.Context, cs *store.ChainSt
 	for blockIdx, bm := range bmsgs {
 		for _, blsm := range bm.BlsMessages {
 			msg := blsm.VMMessage()
+			// if a message ran out of gas while executing this is expected.
+			toCode, found := getActorCode(msg.To)
+			if !found {
+				log.Warnw("failed to find TO actor", "height", ts.Height().String(), "message", msg.Cid().String(), "actor", msg.To.String())
+			}
+			fromCode, found := getActorCode(msg.From)
+			if !found {
+				log.Warnw("failed to find FROM actor", "height", ts.Height().String(), "message", msg.Cid().String(), "actor", msg.To.String())
+			}
 			emsgs = append(emsgs, &lens.ExecutedMessage{
 				Cid:           blsm.Cid(),
 				Height:        pts.Height(),
@@ -343,14 +331,22 @@ func GetExecutedAndBlockMessagesForTipset(ctx context.Context, cs *store.ChainSt
 				BlockHeader:   pblocks[blockIdx],
 				Blocks:        messageBlocks[blsm.Cid()],
 				Index:         index,
-				FromActorCode: getActorCode(msg.From),
-				ToActorCode:   getActorCode(msg.To),
+				FromActorCode: fromCode,
+				ToActorCode:   toCode,
 			})
 			index++
 		}
 
 		for _, secm := range bm.SecpkMessages {
 			msg := secm.VMMessage()
+			toCode, found := getActorCode(msg.To)
+			if !found {
+				log.Warnw("failed to find TO actor", "height", ts.Height().String(), "message", msg.Cid().String(), "actor", msg.To.String())
+			}
+			fromCode, found := getActorCode(msg.From)
+			if !found {
+				log.Warnw("failed to find FROM actor", "height", ts.Height().String(), "message", msg.Cid().String(), "actor", msg.To.String())
+			}
 			emsgs = append(emsgs, &lens.ExecutedMessage{
 				Cid:           secm.Cid(),
 				Height:        pts.Height(),
@@ -358,8 +354,8 @@ func GetExecutedAndBlockMessagesForTipset(ctx context.Context, cs *store.ChainSt
 				BlockHeader:   pblocks[blockIdx],
 				Blocks:        messageBlocks[secm.Cid()],
 				Index:         index,
-				FromActorCode: getActorCode(msg.From),
-				ToActorCode:   getActorCode(msg.To),
+				FromActorCode: fromCode,
+				ToActorCode:   toCode,
 			})
 			index++
 		}
@@ -386,6 +382,11 @@ func GetExecutedAndBlockMessagesForTipset(ctx context.Context, cs *store.ChainSt
 	})
 	if err != nil {
 		return nil, xerrors.Errorf("creating temporary vm: %w", err)
+	}
+
+	parentStateTree, err := state.LoadStateTree(cs.ActorStore(ctx), pts.ParentState())
+	if err != nil {
+		return nil, xerrors.Errorf("load state tree: %w", err)
 	}
 
 	// Receipts are in same order as BlockMsgsForTipset
@@ -423,4 +424,97 @@ func GetExecutedAndBlockMessagesForTipset(ctx context.Context, cs *store.ChainSt
 		Executed: emsgs,
 		Block:    blkMsgs,
 	}, nil
+}
+
+func MethodAndParamsForMessage(m *types.Message, destCode cid.Cid) (string, string, error) {
+	var params ipld.Node
+	var method string
+	var err error
+
+	// fall back to generic cbor->json conversion.
+	params, method, err = messages.ParseParams(m.Params, int64(m.Method), destCode)
+	if method == "Unknown" {
+		return "", "", xerrors.Errorf("unknown method for actor type %s: %d", destCode.String(), int64(m.Method))
+	}
+	if err != nil {
+		log.Warnf("failed to parse parameters of message %s: %v", m.Cid, err)
+		// this can occur when the message is not valid cbor
+		return method, "", err
+	}
+	if params == nil {
+		return method, "", nil
+	}
+
+	buf := bytes.NewBuffer(nil)
+	if err := fcjson.Encoder(params, buf); err != nil {
+		return "", "", xerrors.Errorf("json encode: %w", err)
+	}
+
+	encoded := string(bytes.ReplaceAll(bytes.ToValidUTF8(buf.Bytes(), []byte{}), []byte{0x00}, []byte{}))
+
+	return method, encoded, nil
+
+}
+
+func ActorNameAndFamilyFromCode(c cid.Cid) (name string, family string, err error) {
+	if !c.Defined() {
+		return "", "", xerrors.Errorf("cannot derive actor name from undefined CID")
+	}
+	name = builtin.ActorNameByCode(c)
+	if name == "<unknown>" {
+		return "", "", xerrors.Errorf("cannot derive actor name from unknown CID: %s (maybe we need up update deps?)", c.String())
+	}
+	tokens := strings.Split(name, "/")
+	if len(tokens) != 3 {
+		return "", "", xerrors.Errorf("cannot parse actor name: %s from tokens: %s", name, tokens)
+	}
+	// network = tokens[0]
+	// version = tokens[1]
+	family = tokens[2]
+	return
+}
+
+func MakeGetActorCodeFunc(ctx context.Context, store adt.Store, ts, pts *types.TipSet) (func(a address.Address) (cid.Cid, bool), error) {
+	if !types.CidArrsEqual(ts.Parents().Cids(), pts.Cids()) {
+		return nil, xerrors.Errorf("child tipset (%s) is not on the same chain as parent (%s)", ts.Key(), pts.Key())
+	}
+
+	stateTree, err := state.LoadStateTree(store, ts.ParentState())
+	if err != nil {
+		return nil, xerrors.Errorf("load state tree: %w", err)
+	}
+
+	initActor, err := stateTree.GetActor(builtininit.Address)
+	if err != nil {
+		return nil, xerrors.Errorf("getting init actor: %w", err)
+	}
+
+	initActorState, err := builtininit.Load(store, initActor)
+	if err != nil {
+		return nil, xerrors.Errorf("loading init actor state: %w", err)
+	}
+
+	// Build a lookup of actor codes
+	actorCodes := map[address.Address]cid.Cid{}
+	if err := stateTree.ForEach(func(a address.Address, act *types.Actor) error {
+		actorCodes[a] = act.Code
+		return nil
+	}); err != nil {
+		return nil, xerrors.Errorf("iterate actors: %w", err)
+	}
+
+	return func(a address.Address) (cid.Cid, bool) {
+		ra, found, err := initActorState.ResolveAddress(a)
+		if err != nil || !found {
+			return cid.Undef, false
+		}
+
+		c, ok := actorCodes[ra]
+		if ok {
+			return c, true
+		}
+
+		return cid.Undef, false
+	}, nil
+
 }

@@ -43,6 +43,10 @@ func (aw *APIWrapper) GetExecutedAndBlockMessagesForTipset(ctx context.Context, 
 	return nil, xerrors.Errorf("GetExecutedAndBlockMessagesForTipset is not implemented")
 }
 
+func (aw *APIWrapper) GetMessageExecutionsForTipSet(ctx context.Context, ts, pts *types.TipSet) ([]*lens.MessageExecution, error) {
+	return nil, xerrors.Errorf("GetMessageExecutionsForTipSet is not implemented")
+}
+
 func (aw *APIWrapper) Get(ctx context.Context, c cid.Cid, out interface{}) error {
 	cu, ok := out.(cbg.CBORUnmarshaler)
 	if !ok {

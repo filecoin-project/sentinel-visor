@@ -6,9 +6,11 @@ import (
 
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/events"
+	"github.com/filecoin-project/lotus/chain/stmgr"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/node/impl/common"
 	"github.com/filecoin-project/lotus/node/impl/full"
+	"github.com/filecoin-project/sentinel-visor/lens/lily/modules"
 	"github.com/filecoin-project/specs-actors/actors/util/adt"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
@@ -33,6 +35,11 @@ type LilyNodeAPI struct {
 	Events         *events.Events
 	Scheduler      *schedule.Scheduler
 	StorageCatalog *storage.Catalog
+	ExecMonitor    stmgr.ExecMonitor
+}
+
+func (m *LilyNodeAPI) Daemonized() bool {
+	return true
 }
 
 func (m *LilyNodeAPI) LilyWatch(_ context.Context, cfg *LilyWatchConfig) (schedule.JobID, error) {
@@ -136,6 +143,63 @@ func (m *LilyNodeAPI) Open(_ context.Context) (lens.API, lens.APICloser, error) 
 
 func (m *LilyNodeAPI) GetExecutedAndBlockMessagesForTipset(ctx context.Context, ts, pts *types.TipSet) (*lens.TipSetMessages, error) {
 	return util.GetExecutedAndBlockMessagesForTipset(ctx, m.ChainAPI.Chain, ts, pts)
+}
+
+func (m *LilyNodeAPI) GetMessageExecutionsForTipSet(ctx context.Context, ts *types.TipSet, pts *types.TipSet) ([]*lens.MessageExecution, error) {
+	// this is defined in the lily daemon dep injection constructor, failure here is a developer error.
+	msgMonitor, ok := m.ExecMonitor.(*modules.BufferedExecMonitor)
+	if !ok {
+		panic("bad cast, developer error")
+	}
+
+	// if lily was watching the chain when this tipset was applied then its exec monitor will already
+	// contain executions for this tipset.
+	executions, err := msgMonitor.ExecutionFor(pts)
+	if err != nil && err != modules.ExecutionTraceNotFound {
+		return nil, err
+	}
+
+	// if lily hasn't watched this tipset be applied then we need to compute its execution trace.
+	// this will likely be the case for most walk tasks.
+	if err == modules.ExecutionTraceNotFound {
+		_, err := m.StateManager.ExecutionTraceWithMonitor(ctx, pts, msgMonitor)
+		if err != nil {
+			return nil, err
+		}
+		// the above call will populate the msgMonitor with an execution trace for this tipset, get it.
+		executions, err = msgMonitor.ExecutionFor(pts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	getActorCode, err := util.MakeGetActorCodeFunc(ctx, m.ChainAPI.Chain.ActorStore(ctx), ts, pts)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*lens.MessageExecution, len(executions))
+	for idx, execution := range executions {
+		toCode, found := getActorCode(execution.Msg.To)
+		if !found {
+			log.Warnw("failed to find TO actor", "height", ts.Height().String(), "message", execution.Msg.Cid().String(), "actor", execution.Msg.To.String())
+		}
+		fromCode, found := getActorCode(execution.Msg.From)
+		if !found {
+			log.Warnw("failed to find FROM actor", "height", ts.Height().String(), "message", execution.Msg.Cid().String(), "actor", execution.Msg.From.String())
+		}
+		out[idx] = &lens.MessageExecution{
+			Cid:           execution.Mcid,
+			StateRoot:     execution.TipSet.ParentState(),
+			Height:        execution.TipSet.Height(),
+			Message:       execution.Msg,
+			Ret:           execution.Ret,
+			Implicit:      execution.Implicit,
+			ToActorCode:   toCode,
+			FromActorCode: fromCode,
+		}
+	}
+	return out, nil
 }
 
 func (m *LilyNodeAPI) Store() adt.Store {
