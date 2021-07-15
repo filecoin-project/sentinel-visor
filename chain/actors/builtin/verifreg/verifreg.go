@@ -86,9 +86,30 @@ func Load(store adt.Store, act *types.Actor) (State, error) {
 type State interface {
 	cbor.Marshaler
 
+	Code() cid.Cid
+
 	RootKey() (address.Address, error)
 	VerifiedClientDataCap(address.Address) (bool, abi.StoragePower, error)
 	VerifierDataCap(address.Address) (bool, abi.StoragePower, error)
 	ForEachVerifier(func(addr address.Address, dcap abi.StoragePower) error) error
 	ForEachClient(func(addr address.Address, dcap abi.StoragePower) error) error
+
+	verifiers() (adt.Map, error)
+	verifiedClients() (adt.Map, error)
+}
+
+type VerifierInfo struct {
+	Address address.Address
+	DataCap abi.StoragePower
+}
+
+type VerifierChange struct {
+	Before VerifierInfo
+	After  VerifierInfo
+}
+
+type VerifierChanges struct {
+	Added    []VerifierInfo
+	Modified []VerifierChange
+	Removed  []VerifierInfo
 }

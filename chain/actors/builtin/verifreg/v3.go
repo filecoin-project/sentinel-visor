@@ -30,6 +30,10 @@ type state3 struct {
 	store adt.Store
 }
 
+func (s *state3) Code() cid.Cid {
+	return builtin3.VerifiedRegistryActorCodeID
+}
+
 func (s *state3) RootKey() (address.Address, error) {
 	return s.State.RootKey, nil
 }

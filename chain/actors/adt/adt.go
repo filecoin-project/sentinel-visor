@@ -60,7 +60,7 @@ func MapOptsForActorCode(c cid.Cid) (*MapOpts, error) {
 	switch c {
 	// v0
 	// https://github.com/filecoin-project/specs-actors/blob/v0.9.14/actors/util/adt/map.go#L22
-	case builtin0.InitActorCodeID, builtin0.StorageMarketActorCodeID, builtin0.StorageMinerActorCodeID, builtin0.MultisigActorCodeID, builtin0.StoragePowerActorCodeID:
+	case builtin0.InitActorCodeID, builtin0.StorageMarketActorCodeID, builtin0.StorageMinerActorCodeID, builtin0.MultisigActorCodeID, builtin0.StoragePowerActorCodeID, builtin0.VerifiedRegistryActorCodeID:
 		return &MapOpts{
 			Bitwidth: 5,
 			HashFunc: Map0ShaHashFunc,
@@ -68,7 +68,7 @@ func MapOptsForActorCode(c cid.Cid) (*MapOpts, error) {
 
 		// v2
 		// https://github.com/filecoin-project/specs-actors/blob/v2.3.5/actors/util/adt/map.go#L22
-	case builtin2.InitActorCodeID, builtin2.StorageMarketActorCodeID, builtin2.StorageMinerActorCodeID, builtin2.MultisigActorCodeID, builtin2.StoragePowerActorCodeID:
+	case builtin2.InitActorCodeID, builtin2.StorageMarketActorCodeID, builtin2.StorageMinerActorCodeID, builtin2.MultisigActorCodeID, builtin2.StoragePowerActorCodeID, builtin2.VerifiedRegistryActorCodeID:
 		return &MapOpts{
 			Bitwidth: 5,
 			HashFunc: Map2ShaHashFunc,
@@ -76,7 +76,7 @@ func MapOptsForActorCode(c cid.Cid) (*MapOpts, error) {
 
 		// v3
 		// https://github.com/filecoin-project/specs-actors/blob/v3.1.1/actors/util/adt/map.go
-	case builtin3.InitActorCodeID, builtin3.StorageMarketActorCodeID, builtin3.StorageMinerActorCodeID, builtin3.MultisigActorCodeID, builtin3.StoragePowerActorCodeID:
+	case builtin3.InitActorCodeID, builtin3.StorageMarketActorCodeID, builtin3.StorageMinerActorCodeID, builtin3.MultisigActorCodeID, builtin3.StoragePowerActorCodeID, builtin3.VerifiedRegistryActorCodeID:
 		return &MapOpts{
 			Bitwidth: builtin3.DefaultHamtBitwidth,
 			HashFunc: Map2ShaHashFunc,
@@ -84,7 +84,7 @@ func MapOptsForActorCode(c cid.Cid) (*MapOpts, error) {
 
 		// v4
 		// https://github.com/filecoin-project/specs-actors/blob/v4.0.1/actors/util/adt/map.go#L17
-	case builtin4.InitActorCodeID, builtin4.StorageMarketActorCodeID, builtin4.StorageMinerActorCodeID, builtin4.MultisigActorCodeID, builtin4.StoragePowerActorCodeID:
+	case builtin4.InitActorCodeID, builtin4.StorageMarketActorCodeID, builtin4.StorageMinerActorCodeID, builtin4.MultisigActorCodeID, builtin4.StoragePowerActorCodeID, builtin4.VerifiedRegistryActorCodeID:
 		return &MapOpts{
 			Bitwidth: builtin4.DefaultHamtBitwidth,
 			HashFunc: Map2ShaHashFunc,
@@ -92,7 +92,7 @@ func MapOptsForActorCode(c cid.Cid) (*MapOpts, error) {
 
 		// v5
 		// https://github.com/filecoin-project/specs-actors/blob/v5-rc-3/actors/util/adt/map.go#L17
-	case builtin5.InitActorCodeID, builtin5.StorageMarketActorCodeID, builtin5.StorageMinerActorCodeID, builtin5.MultisigActorCodeID, builtin5.StoragePowerActorCodeID:
+	case builtin5.InitActorCodeID, builtin5.StorageMarketActorCodeID, builtin5.StorageMinerActorCodeID, builtin5.MultisigActorCodeID, builtin5.StoragePowerActorCodeID, builtin5.VerifiedRegistryActorCodeID:
 		return &MapOpts{
 			Bitwidth: builtin5.DefaultHamtBitwidth,
 			HashFunc: Map2ShaHashFunc,
